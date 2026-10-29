@@ -22,6 +22,11 @@ declare class SonosTubeNativeModule extends NativeModule<SonosTubeNativeEvents> 
   /** Basic metadata for one video. */
   getVideoInfo(videoId: string): Promise<MediaItem>;
 
+  /** Opens the system file picker for audio files (multiple). Resolves with [] when cancelled. */
+  pickAudioFiles(): Promise<MediaItem[]>;
+  /** Reads the metadata of a previously picked file again (rejects if it is gone). */
+  describeLocalFile(uri: string): Promise<MediaItem>;
+
   /** Starts the foreground service + HTTP stream proxy (idempotent). */
   startProxy(): Promise<ProxyInfo>;
   /** Stops proxy and foreground service. */

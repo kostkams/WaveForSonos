@@ -196,6 +196,21 @@ export const en: Record<TranslationKey, string> = {
   'library.clearHistoryTitle': 'Clear history?',
   'library.clearHistoryText': 'All {count} entries will be deleted from this phone.',
 
+  // local files
+  'library.files': 'Files',
+  'files.add': 'Add files',
+  'files.added': '{tracks} added',
+  'files.noneNew': 'No new files – they are all in the list already',
+  'files.pickFailed': 'Could not open the file picker: {error}',
+  'files.onThisPhone': '{tracks} on this phone',
+  'files.emptyTitle': 'No files yet',
+  'files.emptyText': 'Add music from your phone (MP3, M4A, FLAC, WAV, OGG). It plays on Sonos over your Wi-Fi.',
+  'files.remove': 'Remove from list',
+  'files.removed': 'Removed from the list',
+  'files.unknownArtist': 'Local file',
+  'files.playAll': 'Play all',
+  'files.shuffleAll': 'Shuffle all',
+
   // own playlist screen
   'mylist.notFound': 'Playlist not found',
   'mylist.options': 'Playlist options',

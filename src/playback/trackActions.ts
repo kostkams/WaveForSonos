@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import type { RowAction } from '@/components/MediaRow';
 import { t, tn } from '@/i18n';
 import type { MediaItem } from '@/native';
+import { isPlayable } from '@/util/media';
 import { enqueue } from './controller';
 
 // Items for the "add to playlist" sheet are handed over in memory (too big for route params).
@@ -16,7 +17,7 @@ export function takePendingAdd() {
 
 /** Opens the sheet to add videos to one of the user's playlists (or a new one). */
 export function openAddToPlaylist(items: MediaItem[], title?: string) {
-  const videos = items.filter((i) => i.type === 'video');
+  const videos = items.filter(isPlayable);
   if (!videos.length) return;
   pending = { items: videos, title: title ?? (videos.length === 1 ? videos[0].title : tn('common.tracks', videos.length)) };
   router.push('/add-to-playlist');

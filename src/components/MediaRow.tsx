@@ -48,7 +48,7 @@ export function MediaRow({ item, onPress, actions = [], meta: metaOverride }: Pr
         width={120}
         height={68}
         badge={badge || undefined}
-        icon={isPlaylist ? 'playlist-play' : 'music-note'}
+        icon={isPlaylist ? 'playlist-play' : item.type === 'local' ? 'file-music-outline' : 'music-note'}
         tint={isPlaylist ? colors.tertiaryContainer : undefined}
       />
       <View style={styles.text}>

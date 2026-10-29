@@ -3,8 +3,9 @@
 export type SearchFilter = 'all' | 'videos' | 'playlists';
 
 export type MediaItem = {
-  type: 'video' | 'playlist';
-  /** YouTube video id or playlist id */
+  /** 'local' = audio file on the phone (picked via the system file picker) */
+  type: 'video' | 'playlist' | 'local';
+  /** YouTube video id, playlist id, or for local files the base64url-encoded content URI */
   id: string;
   title: string;
   channel: string;
@@ -14,7 +15,12 @@ export type MediaItem = {
   viewCount: number | null;
   /** Only for playlists */
   videoCount: number | null;
+  /** YouTube URL, or the content:// URI of a local file */
   url: string;
+  /** Local files only: file extension Sonos needs to pick the decoder (mp3, m4a, flac, …) */
+  ext?: string | null;
+  /** Local files only */
+  sizeBytes?: number | null;
 };
 
 export type SearchPage = {

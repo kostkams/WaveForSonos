@@ -22,6 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  *  GET|HEAD /stream/<id>.m4a          – byte-exact M4A passthrough with Range support
  *  GET|HEAD /stream/<id>.aac?start=s  – fMP4 → ADTS remux (compatibility mode)
+ *  GET|HEAD /local/<id>.<ext>          – local audio file (base64url content URI) with Range support
+ *  GET|HEAD /local-art/<sha1>.jpg     – embedded cover art of a local file
  *  GET      /health                   – "ok"
  */
 class StreamProxyServer {
@@ -163,6 +165,14 @@ class StreamProxyServer {
       sendText(out, 200, "OK", "ok", head)
       return
     }
+    LOCAL_PATH.matchEntire(req.path)?.let {
+      serveLocal(it.groupValues[1], it.groupValues[2], req, out, head)
+      return
+    }
+    LOCAL_ART_PATH.matchEntire(req.path)?.let {
+      serveLocalArt(it.groupValues[1], out, head)
+      return
+    }
     val m = STREAM_PATH.matchEntire(req.path)
     if (m == null) {
       sendText(out, 404, "Not Found", "not found", head)
@@ -280,6 +290,76 @@ class StreamProxyServer {
     }
   }
 
+  private fun serveLocal(id: String, ext: String, req: HttpRequest, out: OutputStream, head: Boolean) {
+    val uri = LocalAudio.decodeId(id)
+    if (uri == null) {
+      sendText(out, 400, "Bad Request", "bad id", head)
+      return
+    }
+    // Probe the length first, then reopen at the requested offset.
+    val total = try {
+      LocalAudio.open(uri, 0).use { it.length }
+    } catch (e: Exception) {
+      Log.w(TAG, "local file not readable: $uri", e)
+      sendText(out, 404, "Not Found", "file not readable (removed or permission lost)", head)
+      return
+    }
+    val headers = linkedMapOf(
+      "Content-Type" to LocalAudio.mimeForExtension(ext),
+      "Cache-Control" to "no-cache"
+    )
+    var start = 0L
+    var end = total - 1
+    var status = 200
+    if (total > 0) {
+      headers["Accept-Ranges"] = "bytes"
+      when (val r = HttpRange.parse(req.headers["range"], total)) {
+        is RangeResult.Unsatisfiable -> {
+          headers["Content-Range"] = "bytes */$total"
+          writeHead(out, 416, "Range Not Satisfiable", headers + ("Content-Length" to "0"))
+          return
+        }
+        is RangeResult.Partial -> {
+          start = r.range.start
+          end = r.range.end
+          status = 206
+          headers["Content-Range"] = "bytes $start-$end/$total"
+        }
+        RangeResult.Full -> Unit
+      }
+      headers["Content-Length"] = (end - start + 1).toString()
+    } else {
+      headers["Accept-Ranges"] = "none"
+    }
+    writeHead(out, status, if (status == 206) "Partial Content" else "OK", headers)
+    if (head) return
+    out.flush()
+    LocalAudio.open(uri, start).use { file ->
+      val buf = ByteArray(64 * 1024)
+      var remaining = if (total > 0) end - start + 1 else Long.MAX_VALUE
+      while (remaining > 0) {
+        val n = file.stream.read(buf, 0, minOf(buf.size.toLong(), remaining).toInt())
+        if (n < 0) break
+        out.write(buf, 0, n)
+        remaining -= n
+      }
+    }
+  }
+
+  private fun serveLocalArt(name: String, out: OutputStream, head: Boolean) {
+    val file = LocalAudio.artFile(name)
+    if (file == null) {
+      sendText(out, 404, "Not Found", "no cover", head)
+      return
+    }
+    writeHead(
+      out, 200, "OK",
+      mapOf("Content-Type" to "image/jpeg", "Content-Length" to file.length().toString(), "Cache-Control" to "max-age=86400")
+    )
+    if (head) return
+    file.inputStream().use { it.copyTo(out, 64 * 1024) }
+  }
+
   private fun writeHead(out: OutputStream, status: Int, reason: String, headers: Map<String, String>) {
     val sb = StringBuilder()
     sb.append("HTTP/1.1 ").append(status).append(' ').append(reason).append("\r\n")
@@ -302,6 +382,8 @@ class StreamProxyServer {
   companion object {
     private const val TAG = "SonosTubeProxy"
     const val DEFAULT_PORT = 8080
+    private val LOCAL_PATH = Regex("^/local/([A-Za-z0-9_-]{8,4000})\\.([a-z0-9]{2,5})$")
+    private val LOCAL_ART_PATH = Regex("^/local-art/([0-9a-f]{40}\\.jpg)$")
     private val STREAM_PATH = Regex("^/stream/([A-Za-z0-9_-]{6,20})\\.(m4a|aac)$")
   }
 }

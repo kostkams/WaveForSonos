@@ -16,6 +16,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
@@ -37,6 +38,8 @@ class NowPlayingRecord : Record {
 }
 
 class SonosTubeNativeModule : Module() {
+  /** Pending result of the system file picker (pickAudioFiles). */
+  private var pickResult: CompletableDeferred<List<Uri>>? = null
   private val context: Context
     get() = requireNotNull(appContext.reactContext) { "React context is not available" }
 
@@ -46,6 +49,7 @@ class SonosTubeNativeModule : Module() {
     Events(EVENT_SHARED_TEXT, EVENT_MEDIA_ACTION, EVENT_VOLUME_KEY)
 
     OnCreate {
+      appContext.reactContext?.let { LocalAudio.init(it) }
       ServiceBridge.mediaActionListener = { action ->
         try {
           sendEvent(EVENT_MEDIA_ACTION, mapOf("action" to action))
@@ -64,6 +68,56 @@ class SonosTubeNativeModule : Module() {
       ServiceBridge.mediaActionListener = null
       ServiceBridge.volumeListener = null
     }
+
+    OnActivityResult { _, payload ->
+      if (payload.requestCode != REQUEST_PICK_AUDIO) return@OnActivityResult
+      val data = payload.data
+      val uris = mutableListOf<Uri>()
+      if (payload.resultCode == android.app.Activity.RESULT_OK && data != null) {
+        val clip = data.clipData
+        if (clip != null) {
+          for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let { uris.add(it) }
+        } else {
+          data.data?.let { uris.add(it) }
+        }
+      }
+      pickResult?.complete(uris)
+      pickResult = null
+    }
+
+    // region local files
+
+    /** Opens the system picker for audio files; resolves with their metadata (empty if cancelled). */
+    AsyncFunction("pickAudioFiles") Coroutine { ->
+      val activity = appContext.currentActivity ?: throw CodedException("ERR_NO_ACTIVITY", "No foreground activity", null)
+      LocalAudio.init(activity)
+      val result = CompletableDeferred<List<Uri>>()
+      pickResult?.complete(emptyList())
+      pickResult = result
+      withContext(Dispatchers.Main) {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+          addCategory(Intent.CATEGORY_OPENABLE)
+          type = "audio/*"
+          putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        activity.startActivityForResult(intent, REQUEST_PICK_AUDIO)
+      }
+      val uris = result.await()
+      withContext(Dispatchers.IO) {
+        uris.map { uri ->
+          LocalAudio.persistPermission(uri)
+          LocalAudio.describe(uri)
+        }
+      }
+    }
+
+    /** Re-reads metadata of an already picked file (e.g. to check it still exists). */
+    AsyncFunction("describeLocalFile") Coroutine { uri: String ->
+      withContext(Dispatchers.IO) { LocalAudio.describe(Uri.parse(uri)) }
+    }
+
+    // endregion
 
     OnNewIntent { intent ->
       val text = consumeSharedText(intent)
@@ -227,6 +281,7 @@ class SonosTubeNativeModule : Module() {
     private const val EVENT_SHARED_TEXT = "onSharedText"
     private const val EVENT_MEDIA_ACTION = "onMediaAction"
     private const val EVENT_VOLUME_KEY = "onVolumeKey"
+    private const val REQUEST_PICK_AUDIO = 0x5A17
     private const val CONSUMED_EXTRA = "de.kostka.sonostube.SHARED_TEXT_CONSUMED"
     private val PALETTES = listOf("accent1", "accent2", "accent3", "neutral1", "neutral2")
     private val TONES = listOf(0, 10, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000)

@@ -4,6 +4,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { currentLang, localeOf, translate, type Lang } from '@/i18n';
 import type { MediaItem } from '@/native';
+import { slimItem } from '@/util/media';
 
 export type HistoryEntry = {
   /** Unique per entry */
@@ -27,17 +28,7 @@ type HistoryState = {
 /** Pure helper (tested): newest first, merged and capped. */
 export function addToHistory(entries: HistoryEntry[], item: MediaItem, at: number): HistoryEntry[] {
   // Store only what the list needs; thumbnails are URLs, so entries stay small.
-  const slim: MediaItem = {
-    type: 'video',
-    id: item.id,
-    title: item.title,
-    channel: item.channel,
-    durationSec: item.durationSec,
-    thumbnail: item.thumbnail,
-    viewCount: null,
-    videoCount: null,
-    url: item.url,
-  };
+  const slim = slimItem(item);
   const recent = entries.find((e) => e.item.id === item.id && at - e.playedAt < HISTORY_MERGE_MS);
   const rest = recent ? entries.filter((e) => e !== recent) : entries;
   const entry: HistoryEntry = { key: recent?.key ?? `${item.id}-${at}`, item: slim, playedAt: at };

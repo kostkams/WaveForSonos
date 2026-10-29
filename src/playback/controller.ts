@@ -6,6 +6,7 @@ import { useHistory } from '@/state/historyStore';
 import { currentItem, toQueueItem, usePlayer, type QueueItem } from '@/state/playerStore';
 import { useSettings } from '@/state/settingsStore';
 import { useSpeakers } from '@/state/speakerStore';
+import { isLocal, isPlayable, localArtName } from '@/util/media';
 import { currentTargetIp, ensureTargetIp, errorText, refreshVolumes } from './speakers';
 import { initVolumeKeys, lastKeyAt, resetRemoteVolumeSync } from './volumeKeys';
 
@@ -35,22 +36,43 @@ export function resetProxy() {
   baseUrl = null;
 }
 
+/** Compatibility mode (ADTS remux) only applies to YouTube streams. */
+const usesAac = (item: QueueItem) => !isLocal(item) && useSettings.getState().streamFormat === 'aac';
+
 function streamUrl(base: string, item: QueueItem, startSec?: number | null): string {
+  if (isLocal(item)) return `${base}/local/${item.id}.${item.ext ?? 'mp3'}`;
   const fmt = useSettings.getState().streamFormat;
   const url = `${base}/stream/${item.id}.${fmt}`;
   return fmt === 'aac' && startSec ? `${url}?start=${Math.floor(startSec)}` : url;
 }
 
+const LOCAL_MIME: Record<string, string> = {
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  flac: 'audio/flac',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  wma: 'audio/x-ms-wma',
+};
+
+/** Artwork URL Sonos can load: YouTube thumbnails directly, local covers through our proxy. */
+function artworkFor(item: QueueItem, base: string | null): string | null {
+  if (!isLocal(item)) return item.thumbnail;
+  const name = localArtName(item.thumbnail);
+  return name && base ? `${base}/local-art/${name}` : null;
+}
+
 function didlFor(item: QueueItem, uri: string): string {
-  const fmt = useSettings.getState().streamFormat;
+  const mimeType = isLocal(item) ? (LOCAL_MIME[item.ext ?? ''] ?? 'audio/mpeg') : usesAac(item) ? 'audio/aac' : 'audio/mp4';
   return sonos.buildDidl({
     id: item.id,
     title: item.title,
     artist: item.channel,
     album: 'Wave for Sonos',
-    artworkUrl: item.thumbnail ?? undefined,
+    artworkUrl: artworkFor(item, baseUrl) ?? undefined,
     streamUrl: uri,
-    mimeType: fmt === 'aac' ? 'audio/aac' : 'audio/mp4',
+    mimeType,
     durationSec: item.durationSec ?? undefined,
   });
 }
@@ -59,8 +81,9 @@ function isOurs(uri: string | undefined | null): boolean {
   return !!uri && !!baseUrl && uri.startsWith(baseUrl);
 }
 
+/** Track id inside one of our stream URLs (YouTube video id or local file id). */
 function idFromUri(uri: string): string | null {
-  const m = uri.match(/\/stream\/([A-Za-z0-9_-]{11})\./);
+  const m = uri.match(/\/(?:stream|local)\/([A-Za-z0-9_-]+)\./);
   return m ? m[1] : null;
 }
 
@@ -68,7 +91,7 @@ function idFromUri(uri: string): string | null {
 
 /** Inserts items after the current track and starts the first of them. */
 export async function playNow(items: MediaItem[], startSec?: number | null): Promise<void> {
-  const videos = items.filter((i) => i.type === 'video');
+  const videos = items.filter(isPlayable);
   if (!videos.length) return;
   const { queue, index } = player();
   const at = index < 0 ? queue.length : index + 1;
@@ -78,7 +101,7 @@ export async function playNow(items: MediaItem[], startSec?: number | null): Pro
 }
 
 export function enqueue(items: MediaItem[]): number {
-  const videos = items.filter((i) => i.type === 'video').map(toQueueItem);
+  const videos = items.filter(isPlayable).map(toQueueItem);
   player().set({ queue: [...player().queue, ...videos] });
   nextQueuedFor = null;
   void queueNextOnSonos();
@@ -140,7 +163,7 @@ export async function playIndex(i: number, startSec?: number | null): Promise<vo
     userStopped = false;
     await sonos.setUri(ip, uri, didlFor(item, uri));
     await sonos.play(ip);
-    if (startSec && useSettings.getState().streamFormat === 'm4a') await seekWhenReady(ip, startSec);
+    if (startSec && !usesAac(item)) await seekWhenReady(ip, startSec);
     player().set({ transport: 'PLAYING' });
     useHistory.getState().record(item);
     nextQueuedFor = null;
@@ -224,7 +247,7 @@ export async function seekTo(sec: number): Promise<void> {
   const target = Math.max(0, Math.min(sec, (player().durationSec ?? sec) - 1));
   player().set({ positionSec: target });
   try {
-    if (useSettings.getState().streamFormat === 'aac') {
+    if (usesAac(item)) {
       // Raw AAC streams aren't seekable on Sonos: restart the stream at the new offset.
       await playIndex(player().index, target);
     } else {
@@ -329,7 +352,7 @@ function notify() {
     Native.updateNowPlaying({
       title: cur.title,
       artist: cur.channel,
-      artworkUrl: cur.thumbnail,
+      artworkUrl: artworkFor(cur, baseUrl),
       playing: s.transport === 'PLAYING' || s.transport === 'TRANSITIONING',
     });
   } catch {

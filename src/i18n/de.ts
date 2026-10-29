@@ -196,6 +196,21 @@ export const de = {
   'library.clearHistoryTitle': 'Verlauf leeren?',
   'library.clearHistoryText': 'Alle {count} Einträge werden von diesem Handy gelöscht.',
 
+  // local files
+  'library.files': 'Dateien',
+  'files.add': 'Dateien hinzufügen',
+  'files.added': '{tracks} hinzugefügt',
+  'files.noneNew': 'Keine neuen Dateien – schon alle in der Liste',
+  'files.pickFailed': 'Dateiauswahl fehlgeschlagen: {error}',
+  'files.onThisPhone': '{tracks} auf diesem Handy',
+  'files.emptyTitle': 'Noch keine Dateien',
+  'files.emptyText': 'Füge Musik vom Handy hinzu (MP3, M4A, FLAC, WAV, OGG). Sie wird über dein WLAN auf Sonos abgespielt.',
+  'files.remove': 'Aus der Liste entfernen',
+  'files.removed': 'Aus der Liste entfernt',
+  'files.unknownArtist': 'Lokale Datei',
+  'files.playAll': 'Alle abspielen',
+  'files.shuffleAll': 'Alle zufällig abspielen',
+
   // own playlist screen
   'mylist.notFound': 'Playlist nicht gefunden',
   'mylist.options': 'Playlist-Optionen',

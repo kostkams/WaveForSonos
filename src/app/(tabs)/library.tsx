@@ -2,20 +2,23 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, SectionList, StyleSheet, View } from 'react-native';
-import { Button, Dialog, Portal, SegmentedButtons, Snackbar, Text, TextInput } from 'react-native-paper';
+import { Button, Dialog, IconButton, Portal, SegmentedButtons, Snackbar, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MediaRow } from '@/components/MediaRow';
 import { Thumb } from '@/components/Thumb';
+import { Native } from '@/native';
 import { playNow } from '@/playback/controller';
+import { errorText } from '@/playback/speakers';
 import { trackActions } from '@/playback/trackActions';
 import { groupByDay, useHistory } from '@/state/historyStore';
-import { totalDuration, usePlaylists } from '@/state/playlistStore';
+import { useLocalFiles } from '@/state/localFilesStore';
+import { shuffled, totalDuration, usePlaylists } from '@/state/playlistStore';
 import { useT } from '@/i18n';
 import { useAppTheme, withAlpha } from '@/theme/theme';
-import { formatTotal } from '@/util/format';
+import { formatDuration, formatTotal } from '@/util/format';
 
-type Segment = 'playlists' | 'history';
+type Segment = 'playlists' | 'files' | 'history';
 
 export default function LibraryScreen() {
   const { colors } = useAppTheme();
@@ -34,12 +37,19 @@ export default function LibraryScreen() {
           onValueChange={(v) => setSegment(v as Segment)}
           buttons={[
             { value: 'playlists', label: t('library.playlists'), icon: 'playlist-music', showSelectedCheck: false },
+            { value: 'files', label: t('library.files'), icon: 'folder-music-outline', showSelectedCheck: false },
             { value: 'history', label: t('library.history'), icon: 'history', showSelectedCheck: false },
           ]}
         />
       </View>
 
-      {segment === 'playlists' ? <PlaylistsView /> : <HistoryView notify={setMessage} />}
+      {segment === 'playlists' ? (
+        <PlaylistsView />
+      ) : segment === 'files' ? (
+        <FilesView notify={setMessage} />
+      ) : (
+        <HistoryView notify={setMessage} />
+      )}
 
       <Snackbar visible={!!message} onDismiss={() => setMessage(null)} duration={2500}>
         {message ?? ''}
@@ -129,6 +139,88 @@ function PlaylistsView() {
   );
 }
 
+// ---------------------------------------------------------------- local files
+
+function FilesView({ notify }: { notify: (m: string) => void }) {
+  const { colors } = useAppTheme();
+  const { t, tn, lang } = useT();
+  const files = useLocalFiles((s) => s.files);
+  const addFiles = useLocalFiles((s) => s.add);
+  const removeFile = useLocalFiles((s) => s.remove);
+  const [picking, setPicking] = useState(false);
+
+  const pick = async () => {
+    setPicking(true);
+    try {
+      const picked = await Native.pickAudioFiles();
+      if (!picked.length) return;
+      const n = addFiles(picked);
+      notify(n ? t('files.added', { tracks: tn('common.tracks', n) }) : t('files.noneNew'));
+    } catch (e) {
+      notify(t('files.pickFailed', { error: errorText(e) }));
+    } finally {
+      setPicking(false);
+    }
+  };
+
+  return (
+    <FlatList
+      data={files}
+      keyExtractor={(f) => f.id}
+      ListHeaderComponent={
+        <View style={styles.filesBar}>
+          <Button mode="contained-tonal" icon="file-music-outline" onPress={() => void pick()} loading={picking} disabled={picking}>
+            {t('files.add')}
+          </Button>
+          <View style={styles.flex} />
+          {files.length ? (
+            <>
+              <IconButton icon="shuffle-variant" onPress={() => void playNow(shuffled(files))} accessibilityLabel={t('files.shuffleAll')} />
+              <IconButton icon="play" mode="contained" onPress={() => void playNow(files)} accessibilityLabel={t('files.playAll')} />
+            </>
+          ) : null}
+        </View>
+      }
+      renderItem={({ item, index }) => (
+        <MediaRow
+          item={item}
+          meta={[item.channel || t('files.unknownArtist'), formatDuration(item.durationSec), (item.ext ?? '').toUpperCase()].filter(Boolean).join(' · ')}
+          onPress={() => void playNow(files.slice(index))}
+          actions={trackActions(item, notify, [
+            {
+              label: t('files.remove'),
+              icon: 'close',
+              onPress: () => {
+                removeFile(item.id);
+                notify(t('files.removed'));
+              },
+            },
+          ])}
+        />
+      )}
+      ListFooterComponent={
+        files.length ? (
+          <Text variant="bodySmall" style={[styles.footerNote, { color: colors.onSurfaceVariant }]}>
+            {t('files.onThisPhone', { tracks: tn('common.tracks', files.length) })}
+            {` · ${formatTotal(totalDuration(files), lang)}`}
+          </Text>
+        ) : undefined
+      }
+      ListEmptyComponent={
+        <View style={styles.empty}>
+          <MaterialCommunityIcons name="folder-music-outline" size={48} color={colors.onSurfaceVariant} />
+          <Text variant="titleMedium" style={{ color: colors.onSurface }}>
+            {t('files.emptyTitle')}
+          </Text>
+          <Text variant="bodyMedium" style={{ color: colors.onSurfaceVariant, textAlign: 'center' }}>
+            {t('files.emptyText')}
+          </Text>
+        </View>
+      }
+    />
+  );
+}
+
 // ---------------------------------------------------------------- history
 
 function HistoryView({ notify }: { notify: (m: string) => void }) {
@@ -215,4 +307,6 @@ const styles = StyleSheet.create({
   historyBar: { flexDirection: 'row', alignItems: 'center', paddingLeft: 16, paddingRight: 8 },
   section: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
   empty: { padding: 32, gap: 8, alignItems: 'center' },
+  filesBar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 16, paddingRight: 8, paddingVertical: 8 },
+  footerNote: { textAlign: 'center', padding: 16 },
 });

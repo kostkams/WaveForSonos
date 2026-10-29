@@ -62,7 +62,7 @@ export default function PlayerScreen() {
         />
         <IconButton
           icon="share-variant"
-          disabled={!item}
+          disabled={!item || item.type === 'local'}
           onPress={() => item && void Share.share({ message: `https://youtu.be/${item.id}` })}
           accessibilityLabel={t('player.share')}
         />

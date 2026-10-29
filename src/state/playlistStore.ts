@@ -4,6 +4,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { t } from '@/i18n';
 import type { MediaItem } from '@/native';
+import { isPlayable, slimItem } from '@/util/media';
 
 export type UserPlaylist = {
   id: string;
@@ -25,27 +26,15 @@ type PlaylistState = {
   move: (id: string, from: number, to: number) => void;
 };
 
-/** Only videos are stored, slimmed down to what the lists need. */
-export function slim(item: MediaItem): MediaItem {
-  return {
-    type: 'video',
-    id: item.id,
-    title: item.title,
-    channel: item.channel,
-    durationSec: item.durationSec,
-    thumbnail: item.thumbnail,
-    viewCount: null,
-    videoCount: null,
-    url: item.url,
-  };
-}
+/** Only playable items are stored, slimmed down to what the lists need. */
+export const slim = slimItem;
 
 /** Pure helper (tested): appends new videos, skipping ones already in the list. */
 export function mergeItems(existing: MediaItem[], add: MediaItem[]): { items: MediaItem[]; added: number } {
   const seen = new Set(existing.map((i) => i.id));
   const fresh: MediaItem[] = [];
   for (const it of add) {
-    if (it.type !== 'video' || seen.has(it.id)) continue;
+    if (!isPlayable(it) || seen.has(it.id)) continue;
     seen.add(it.id);
     fresh.push(slim(it));
   }

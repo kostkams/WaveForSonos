@@ -47,6 +47,7 @@ class ProxyService : Service() {
 
   override fun onCreate() {
     super.onCreate()
+    LocalAudio.init(this)
     createChannel()
     session = MediaSessionCompat(this, "Wave for Sonos").apply {
       setCallback(object : MediaSessionCompat.Callback() {
