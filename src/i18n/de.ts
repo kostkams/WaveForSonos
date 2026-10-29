@@ -225,6 +225,13 @@ export const de = {
   'mylist.deleteTitle': '„{name}“ löschen?',
   'mylist.deleteText': 'Die Playlist wird von diesem Handy gelöscht. Die Titel selbst bleiben auf YouTube.',
 
+  // playback errors (native error codes)
+  'error.noAudio': 'Für dieses Video ist kein abspielbarer Ton verfügbar.',
+  'error.ageRestricted': 'Dieses Video ist altersbeschränkt und kann nicht abgespielt werden.',
+  'error.geoRestricted': 'Dieses Video ist in deinem Land nicht verfügbar.',
+  'error.unavailable': 'Dieses Video ist nicht verfügbar.',
+  'error.botCheck': 'YouTube blockiert gerade Anfragen. Bitte versuche es später noch einmal.',
+
   // add-to-playlist sheet
   'add.title': 'Zu Playlist hinzufügen',
   'add.nothing': 'Nichts zum Hinzufügen ausgewählt.',

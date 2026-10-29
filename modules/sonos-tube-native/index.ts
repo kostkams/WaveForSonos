@@ -4,6 +4,7 @@ import type {
   DynamicColors,
   NowPlaying,
   PlaylistPage,
+  PreparedStream,
   ProxyInfo,
   SearchFilter,
   SearchPage,
@@ -21,6 +22,12 @@ declare class SonosTubeNativeModule extends NativeModule<SonosTubeNativeEvents> 
   getPlaylist(playlistId: string, page: string | null): Promise<PlaylistPage>;
   /** Basic metadata for one video. */
   getVideoInfo(videoId: string): Promise<MediaItem>;
+  /**
+   * Resolves the stream the proxy will serve for a video (rejects with a coded error, e.g.
+   * ERR_NO_AUDIO_STREAM, when nothing is playable). `muxed` = no audio-only stream exists; such
+   * videos must be played via the ADTS route (/stream/<id>.aac).
+   */
+  prepareStream(videoId: string): Promise<PreparedStream>;
 
   /** Opens the system file picker for audio files (multiple). Resolves with [] when cancelled. */
   pickAudioFiles(): Promise<MediaItem[]>;

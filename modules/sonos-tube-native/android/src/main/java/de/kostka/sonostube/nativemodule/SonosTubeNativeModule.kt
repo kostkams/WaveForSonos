@@ -138,6 +138,27 @@ class SonosTubeNativeModule : Module() {
       withContext(Dispatchers.IO) { YouTubeRepository.getVideoInfo(videoId) }
     }
 
+    /**
+     * Resolves the stream the proxy will serve for [videoId] before Sonos asks for it, so
+     * failures reach the app. `muxed` = only audio+video exists; the app must use the .aac route.
+     */
+    AsyncFunction("prepareStream") Coroutine { videoId: String ->
+      withContext(Dispatchers.IO) {
+        val audio = GoogleVideo.resolveWithLength(videoId)
+        if (audio.muxed) {
+          // Parse (and cache) the audio sample table now: the proxy needs it right away.
+          try {
+            MuxedAudio.sampleTable(audio)
+          } catch (e: Mp4FormatException) {
+            throw YouTubeException("ERR_NO_AUDIO_STREAM", "Audio track of $videoId is not readable: ${e.message}", e)
+          } catch (e: java.io.IOException) {
+            throw YouTubeException("ERR_NETWORK", "Network error: ${e.message}", e)
+          }
+        }
+        mapOf("muxed" to audio.muxed)
+      }
+    }
+
     // endregion
 
     // region proxy / service

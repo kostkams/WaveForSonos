@@ -202,4 +202,140 @@ class PureLogicTest {
   }
 
   // endregion
+
+  // region synthetic progressive MP4 (audio + video, moov after mdat)
+
+  private val audioSamples = listOf(10, 20, 30, 40, 50).mapIndexed { k, n -> ByteArray(n) { (k * 50 + it).toByte() } }
+
+  /** Builds ftyp + mdat (100 kB video filler interleaved with 2 audio chunks) + moov(video trak, audio trak). */
+  private fun progressiveMp4(fixedSampleSize: Boolean = false): Pair<ByteArray, LongArray> {
+    val samples = if (fixedSampleSize) List(5) { k -> ByteArray(16) { (k * 50 + it).toByte() } } else audioSamples
+    val ftyp = box("ftyp", "isom".toByteArray(), zeros(4))
+    val video1 = ByteArray(100_000) { 0x55 }
+    val video2 = ByteArray(13) { 0x66 }
+    val chunk1 = samples[0] + samples[1]
+    val chunk2 = samples[2] + samples[3] + samples[4]
+    val mdatBody = video1 + chunk1 + video2 + chunk2
+    val mdat = box("mdat", mdatBody)
+    val chunk1Offset = ftyp.size + 8 + video1.size
+    val chunk2Offset = chunk1Offset + chunk1.size + video2.size
+
+    val asc = byteArrayOf(0x12, 0x10)
+    val decSpecific = byteArrayOf(0x05, asc.size.toByte()) + asc
+    val decConfig = byteArrayOf(0x04, (13 + decSpecific.size).toByte(), 0x40, 0x15) + zeros(11) + decSpecific
+    val esDesc = byteArrayOf(0x03, (3 + decConfig.size).toByte(), 0, 1, 0) + decConfig
+    val esds = box("esds", zeros(4), esDesc)
+    val mp4a = box("mp4a", zeros(6), u16(1), zeros(8), u16(2), u16(16), zeros(4), u32(44100 shl 16), esds)
+    val stsd = box("stsd", zeros(4), u32(1), mp4a)
+    val stts = box("stts", zeros(4), u32(2), u32(3), u32(1024), u32(2), u32(2048))
+    val stsz = if (fixedSampleSize) box("stsz", zeros(4), u32(16), u32(5))
+    else box("stsz", zeros(4), u32(0), u32(5), *samples.map { u32(it.size) }.toTypedArray())
+    val stsc = box("stsc", zeros(4), u32(2), u32(1), u32(2), u32(1), u32(2), u32(3), u32(1))
+    val stco = box("stco", zeros(4), u32(2), u32(chunk1Offset), u32(chunk2Offset))
+    val audioStbl = box("stbl", stsd, stts, stsz, stsc, stco)
+    val audioTrak = box(
+      "trak",
+      box(
+        "mdia",
+        box("mdhd", zeros(4), zeros(8), u32(44100), u32(0), zeros(4)),
+        box("hdlr", zeros(4), zeros(4), "soun".toByteArray(), zeros(12)),
+        box("minf", audioStbl)
+      )
+    )
+    // A video track whose tables must be ignored.
+    val videoTrak = box(
+      "trak",
+      box(
+        "mdia",
+        box("mdhd", zeros(4), zeros(8), u32(90000), u32(0), zeros(4)),
+        box("hdlr", zeros(4), zeros(4), "vide".toByteArray(), zeros(12)),
+        box("minf", box("stbl", box("stsd", zeros(4), u32(0))))
+      )
+    )
+    val moov = box("moov", box("mvhd", zeros(100)), videoTrak, audioTrak)
+    val offsets = longArrayOf(
+      chunk1Offset.toLong(), (chunk1Offset + samples[0].size).toLong(),
+      chunk2Offset.toLong(), (chunk2Offset + samples[2].size).toLong(), (chunk2Offset + samples[2].size + samples[3].size).toLong()
+    )
+    return (ftyp + mdat + moov) to offsets
+  }
+
+  private fun rangeReader(file: ByteArray): (Long, Long) -> ByteArray =
+    { start, end -> file.copyOfRange(start.toInt(), minOf(end.toInt() + 1, file.size)) }
+
+  @Test
+  fun progressiveMp4_findsMoovAfterMdatAndParsesAudioTable() {
+    val (file, offsets) = progressiveMp4()
+    val reads = ArrayList<LongRange>()
+    val read = rangeReader(file)
+    val moov = Mp4Audio.findMoov(file.size.toLong()) { a, b -> reads.add(a..b); read(a, b) }
+    assertEquals("moov", String(moov, 4, 4, Charsets.ISO_8859_1))
+    assertTrue("moov is beyond the first probe", reads.size >= 2)
+
+    val table = Mp4Audio.parseSampleTable(moov)
+    assertEquals(44100L, table.timescale)
+    assertEquals(2, table.aac.objectType)
+    assertEquals(2, table.aac.channelConfig)
+    assertArrayEquals(offsets, table.offsets)
+    assertArrayEquals(intArrayOf(10, 20, 30, 40, 50), table.sizes)
+    assertArrayEquals(longArrayOf(0, 1024, 2048, 3072, 5120), table.times)
+    assertEquals(0, table.indexAt(0.0))
+    assertEquals(3, table.indexAt(3000.0 / 44100))
+    assertEquals(5, table.indexAt(1000.0))
+    // unknown total length works too
+    assertArrayEquals(moov, Mp4Audio.findMoov(-1, read))
+  }
+
+  @Test
+  fun progressiveMp4_fixedSampleSize() {
+    val (file, offsets) = progressiveMp4(fixedSampleSize = true)
+    val table = Mp4Audio.parseSampleTable(Mp4Audio.findMoov(file.size.toLong(), rangeReader(file)))
+    assertArrayEquals(IntArray(5) { 16 }, table.sizes)
+    assertEquals(offsets[2] + 16, table.offsets[3])
+  }
+
+  @Test
+  fun progressiveMp4_writesAdtsFromStartIndex() {
+    val (file, _) = progressiveMp4()
+    val table = Mp4Audio.parseSampleTable(Mp4Audio.findMoov(file.size.toLong(), rangeReader(file)))
+    val opens = ArrayList<Long>()
+    val open = { start: Long, end: Long ->
+      opens.add(start)
+      ByteArrayInputStream(file.copyOfRange(start.toInt(), end.toInt() + 1)) as java.io.InputStream
+    }
+    fun expected(from: Int) = (from until 5).fold(ByteArray(0)) { acc, k ->
+      acc + Adts.header(2, 4, 2, audioSamples[k].size) + audioSamples[k]
+    }
+    val all = ByteArrayOutputStream()
+    Mp4Audio.writeAdts(table, 0, open, all)
+    assertArrayEquals(expected(0), all.toByteArray())
+    assertEquals(listOf(table.offsets[0]), opens) // video bytes in between are skipped, not reopened
+
+    val tail = ByteArrayOutputStream()
+    Mp4Audio.writeAdts(table, table.indexAt(3000.0 / 44100), open, tail)
+    assertArrayEquals(expected(3), tail.toByteArray())
+
+    val none = ByteArrayOutputStream()
+    Mp4Audio.writeAdts(table, table.count, open, none)
+    assertEquals(0, none.size())
+  }
+
+  @Test
+  fun progressiveMp4_malformedThrowsFormatException() {
+    val (file, _) = progressiveMp4()
+    val moov = Mp4Audio.findMoov(file.size.toLong(), rangeReader(file))
+    try {
+      Mp4Audio.parseSampleTable(moov.copyOf(moov.size - 30))
+      fail("expected Mp4FormatException")
+    } catch (_: Mp4FormatException) {
+    }
+    try {
+      // no moov at all
+      Mp4Audio.findMoov(100_100, rangeReader(file.copyOf(100_100)))
+      fail("expected Mp4FormatException")
+    } catch (_: Mp4FormatException) {
+    }
+  }
+
+  // endregion
 }

@@ -113,13 +113,13 @@ object Adts {
 
 /** Minimal ISO-BMFF parsing for YouTube's DASH audio (itag 140). */
 object Fmp4 {
-  private fun u32(b: ByteArray, o: Int): Long =
+  internal fun u32(b: ByteArray, o: Int): Long =
     ((b[o].toLong() and 0xFF) shl 24) or ((b[o + 1].toLong() and 0xFF) shl 16) or
       ((b[o + 2].toLong() and 0xFF) shl 8) or (b[o + 3].toLong() and 0xFF)
 
-  private fun u64(b: ByteArray, o: Int): Long = (u32(b, o) shl 32) or u32(b, o + 4)
-  private fun u16(b: ByteArray, o: Int): Int = ((b[o].toInt() and 0xFF) shl 8) or (b[o + 1].toInt() and 0xFF)
-  private fun type(b: ByteArray, o: Int): String = String(b, o, 4, Charsets.ISO_8859_1)
+  internal fun u64(b: ByteArray, o: Int): Long = (u32(b, o) shl 32) or u32(b, o + 4)
+  internal fun u16(b: ByteArray, o: Int): Int = ((b[o].toInt() and 0xFF) shl 8) or (b[o + 1].toInt() and 0xFF)
+  internal fun type(b: ByteArray, o: Int): String = String(b, o, 4, Charsets.ISO_8859_1)
 
   /**
    * A box inside [data]: [start] = header start, [payload] = first payload byte, [end] exclusive
@@ -150,7 +150,7 @@ object Fmp4 {
     return boxes
   }
 
-  private fun child(data: ByteArray, parent: Box, type: String) =
+  internal fun child(data: ByteArray, parent: Box, type: String) =
     children(data, parent.payload, parent.end).firstOrNull { it.type == type }
 
   /**
@@ -212,7 +212,7 @@ object Fmp4 {
     return Mp4InitInfo(timescale, aac, defDuration, defSize)
   }
 
-  private fun parseEsds(data: ByteArray, esds: Box): AacConfig {
+  internal fun parseEsds(data: ByteArray, esds: Box): AacConfig {
     var p = esds.payload + 4 // fullbox
     val end = esds.end
     fun readLen(): Int {

@@ -71,4 +71,85 @@ class OnlineSmokeTest {
       server.stop()
     }
   }
+
+  /** Checks that [data] is a sequence of ADTS frames (the last one may be cut off). Returns the frame count. */
+  private fun assertAdts(data: ByteArray): Int {
+    var p = 0
+    var frames = 0
+    while (p + 7 <= data.size) {
+      val sync = ((data[p].toInt() and 0xFF) shl 4) or ((data[p + 1].toInt() and 0xF0) shr 4)
+      assertTrue("ADTS sync at $p (frame $frames)", sync == 0xFFF)
+      val len = ((data[p + 3].toInt() and 0x03) shl 11) or ((data[p + 4].toInt() and 0xFF) shl 3) or ((data[p + 5].toInt() and 0xE0) shr 5)
+      assertTrue("frame length $len", len > 7)
+      p += len
+      frames++
+    }
+    return frames
+  }
+
+  /** Stops a stream copy after [limit] bytes. */
+  private class LimitedOutput(private val limit: Int) : java.io.ByteArrayOutputStream() {
+    override fun write(b: ByteArray, off: Int, len: Int) {
+      super.write(b, off, len)
+      if (size() >= limit) throw Limit()
+    }
+  }
+
+  private class Limit : RuntimeException()
+
+  @Test
+  fun madeForKidsVideoFallsBackToMuxedStream() {
+    online()
+    val id = "gfmmhVqW6kM"
+    val audio = GoogleVideo.resolveWithLength(id)
+    println("kids: itag=${audio.itag} muxed=${audio.muxed} len=${audio.contentLength} durationMs=${audio.durationMs}")
+    assertTrue(audio.muxed)
+    assertTrue(audio.contentLength > 0)
+
+    val t0 = System.currentTimeMillis()
+    val table = MuxedAudio.sampleTable(audio)
+    val lastSec = table.times.last().toDouble() / table.timescale
+    println("kids: ${table.count} audio samples, aac=${table.aac}, timescale=${table.timescale}, last=${"%.1f".format(lastSec)} s, first offset=${table.offsets.first()}, parse ${System.currentTimeMillis() - t0} ms")
+    assertTrue(table.count > 100)
+    assertTrue((1 until table.count).all { table.offsets[it] > table.offsets[it - 1] })
+
+    for (start in listOf(0.0, 60.0)) {
+      val out = LimitedOutput(300_000)
+      val t1 = System.currentTimeMillis()
+      try {
+        MuxedAudio.streamAdts(id, table, start, out)
+      } catch (_: Limit) {
+      }
+      val frames = assertAdts(out.toByteArray())
+      println("kids: start=$start -> ${out.size()} B ADTS, $frames frames, first sample ${table.indexAt(start)}, ${System.currentTimeMillis() - t1} ms")
+      assertTrue(out.size() >= 300_000)
+    }
+  }
+
+  @Test
+  fun proxyServesMuxedVideoAsAdts() {
+    online()
+    val server = StreamProxyServer()
+    val port = server.start(18081)
+    try {
+      for (path in listOf("/stream/gfmmhVqW6kM.aac", "/stream/gfmmhVqW6kM.aac?start=60", "/stream/gfmmhVqW6kM.m4a")) {
+        val c = java.net.URL("http://127.0.0.1:$port$path").openConnection() as java.net.HttpURLConnection
+        val code = c.responseCode
+        val type = c.contentType
+        val body = java.io.ByteArrayOutputStream()
+        if (code == 200) c.inputStream.use { s ->
+          val buf = ByteArray(65536)
+          while (body.size() < 200_000) { val n = s.read(buf); if (n < 0) break; body.write(buf, 0, n) }
+        }
+        c.disconnect()
+        val frames = assertAdts(body.toByteArray())
+        println("$path -> $code $type ${body.size()} B, $frames ADTS frames")
+        assertTrue(code == 200)
+        assertTrue(type == "audio/aac")
+        assertTrue(body.size() >= 200_000)
+      }
+    } finally {
+      server.stop()
+    }
+  }
 }

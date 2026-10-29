@@ -26,10 +26,15 @@ import org.schabi.newpipe.extractor.stream.DeliveryMethod
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import org.schabi.newpipe.extractor.stream.StreamType
+import org.schabi.newpipe.extractor.stream.VideoStream
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 
-/** A resolved, directly fetchable audio-only M4A stream on googlevideo. */
+/**
+ * A resolved, directly fetchable stream on googlevideo: normally an audio-only M4A (DASH
+ * fMP4). [muxed] = no audio-only stream exists (e.g. "made for kids" videos) and this is a
+ * progressive MP4 with audio + video (itag 18) whose AAC track the proxy extracts.
+ */
 data class ResolvedAudio(
   val videoId: String,
   val url: String,
@@ -41,7 +46,8 @@ data class ResolvedAudio(
   val indexStart: Int,
   val indexEnd: Int,
   val durationMs: Long,
-  val expiresAtMs: Long
+  val expiresAtMs: Long,
+  val muxed: Boolean = false
 )
 
 class YouTubeException(code: String, message: String, cause: Throwable? = null) :
@@ -248,29 +254,70 @@ object YouTubeRepository {
     } else {
       StreamInfo.getInfo(service, videoUrl(videoId)).also { rememberStreamInfo(videoId, it) }
     }
+    val durationMs = { itag: org.schabi.newpipe.extractor.services.youtube.ItagItem? ->
+      if (info.duration > 0) info.duration * 1000 else (itag?.approxDurationMs ?: -1L)
+    }
     val stream = pickAudioStream(info.audioStreams)
-      ?: throw YouTubeException("ERR_NO_AUDIO_STREAM", "No M4A/AAC audio stream available for $videoId")
+    if (stream == null) {
+      val muxed = pickMuxedStream(info.videoStreams)
+        ?: throw YouTubeException("ERR_NO_AUDIO_STREAM", "No M4A/AAC audio stream available for $videoId")
+      val url = muxed.content
+      android.util.Log.i("SonosTubeYT", "$videoId: no audio-only stream, using muxed itag ${muxed.itag}")
+      return ResolvedAudio(
+        videoId = videoId,
+        url = url,
+        contentLength = streamLength(muxed.itagItem?.contentLength, url),
+        itag = muxed.itag,
+        userAgent = streamingUserAgent(url),
+        isWebClient = isWebClient(url),
+        // Progressive MP4: no DASH init/index ranges.
+        initEnd = 0,
+        indexStart = 0,
+        indexEnd = 0,
+        durationMs = durationMs(muxed.itagItem),
+        expiresAtMs = expiry(url),
+        muxed = true
+      )
+    }
     val url = stream.content
     val itag = stream.itagItem
-    var length = itag?.contentLength ?: -1L
-    if (length <= 0) length = queryParam(url, "clen")?.toLongOrNull() ?: -1L
-    val expire = queryParam(url, "expire")?.toLongOrNull()?.times(1000)
-      ?: (System.currentTimeMillis() + 5 * 3600_000L)
-    val ua = streamingUserAgent(url)
     return ResolvedAudio(
       videoId = videoId,
       url = url,
-      contentLength = length,
+      contentLength = streamLength(itag?.contentLength, url),
       itag = stream.itag,
-      userAgent = ua,
-      isWebClient = runCatching {
-        YoutubeParsingHelper.isWebStreamingUrl(url) || YoutubeParsingHelper.isWebEmbeddedPlayerStreamingUrl(url)
-      }.getOrDefault(false),
+      userAgent = streamingUserAgent(url),
+      isWebClient = isWebClient(url),
       initEnd = stream.initEnd,
       indexStart = stream.indexStart,
       indexEnd = stream.indexEnd,
-      durationMs = if (info.duration > 0) info.duration * 1000 else (itag?.approxDurationMs ?: -1L),
-      expiresAtMs = expire
+      durationMs = durationMs(itag),
+      expiresAtMs = expiry(url)
+    )
+  }
+
+  /** Length from the itag info, else the `clen` URL parameter, else -1 (probed later by the proxy). */
+  private fun streamLength(itagLength: Long?, url: String): Long {
+    if (itagLength != null && itagLength > 0) return itagLength
+    return queryParam(url, "clen")?.toLongOrNull()?.takeIf { it > 0 } ?: -1L
+  }
+
+  private fun expiry(url: String): Long = queryParam(url, "expire")?.toLongOrNull()?.times(1000)
+    ?: (System.currentTimeMillis() + 5 * 3600_000L)
+
+  private fun isWebClient(url: String): Boolean = runCatching {
+    YoutubeParsingHelper.isWebStreamingUrl(url) || YoutubeParsingHelper.isWebEmbeddedPlayerStreamingUrl(url)
+  }.getOrDefault(false)
+
+  /** Progressive MP4 with an AAC track (itag 18 preferred, else the lowest resolution). */
+  private fun pickMuxedStream(streams: List<VideoStream>): VideoStream? {
+    val candidates = streams.filter {
+      it.format == MediaFormat.MPEG_4 && !it.isVideoOnly() && it.isUrl &&
+        it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP &&
+        (it.codec?.contains("mp4a", ignoreCase = true) ?: (it.itag == 18 || it.itag == 22))
+    }
+    return candidates.minWithOrNull(
+      compareBy<VideoStream>({ if (it.itag == 18) 0 else 1 }, { if (it.height > 0) it.height else Int.MAX_VALUE })
     )
   }
 

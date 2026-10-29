@@ -6,6 +6,7 @@ jest.mock('@/native', () => ({
     startProxy: jest.fn(async () => ({ baseUrl: 'http://10.0.0.5:8080', port: 8080 })),
     stopProxy: jest.fn(async () => undefined),
     updateNowPlaying: jest.fn(),
+    prepareStream: jest.fn(async () => ({ muxed: false })),
     discoverSonos: jest.fn(async () => []),
     addListener: jest.fn(() => ({ remove: jest.fn() })),
   },
@@ -47,6 +48,7 @@ import { usePlayer } from '@/state/playerStore';
 import { useSettings } from '@/state/settingsStore';
 
 const mockSonos = jest.requireMock('@/sonos') as Record<string, jest.Mock>;
+const mockNative = (jest.requireMock('@/native') as { Native: Record<string, jest.Mock> }).Native;
 
 const video = (id: string): MediaItem => ({
   type: 'video',
@@ -78,6 +80,7 @@ beforeEach(() => {
   useSettings.setState({ streamFormat: 'm4a', autoAdvance: true });
   jest.clearAllMocks();
   mockSonos.setUri.mockImplementation(async () => undefined);
+  mockNative.prepareStream.mockImplementation(async () => ({ muxed: false }));
   sonosReports('PLAYING', '');
 });
 afterEach(() => stopPolling());
@@ -278,4 +281,46 @@ test('deselecting the lead room stops it and continues on the new lead', async (
   expect(mockSonos.stop).toHaveBeenCalledWith('10.0.0.41');
   expect(mockSonos.setUri).toHaveBeenCalledTimes(2);
   expect(mockSonos.seek).toHaveBeenCalledWith('10.0.0.40', 30);
+});
+
+test('a muxed video (no audio-only stream) plays via the aac route even in m4a mode', async () => {
+  mockNative.prepareStream.mockImplementation(async (id: string) => ({ muxed: id.startsWith('k') }));
+  enqueue([video('k'), video('b')]);
+  await playIndex(0, 30);
+  expect(mockNative.prepareStream).toHaveBeenCalledWith('kxxxxxxxxxx');
+  expect(setUriArg(0)).toMatch(/\/stream\/kxxxxxxxxxx\.aac\?q=[^&]+&start=30$/);
+  expect(mockSonos.buildDidl).toHaveBeenCalledWith(expect.objectContaining({ mimeType: 'audio/aac' }));
+  expect(mockSonos.seek).not.toHaveBeenCalled();
+  // the following normal video stays on m4a
+  await flush();
+  expect(mockSonos.setNextUri.mock.calls[0][1]).toMatch(/\/stream\/bxxxxxxxxxx\.m4a\?q=[^&]+$/);
+
+  // the position counts from the ?start= offset
+  sonosReports('PLAYING', setUriArg(0), 5);
+  await poll();
+  expect(usePlayer.getState().positionSec).toBe(35);
+});
+
+test('a video without playable audio shows an error and sends nothing to Sonos', async () => {
+  mockNative.prepareStream.mockImplementation(async () => {
+    throw Object.assign(new Error('No M4A/AAC audio stream available'), { code: 'ERR_NO_AUDIO_STREAM' });
+  });
+  enqueue([video('a')]);
+  await playIndex(0);
+  expect(mockSonos.setUri).not.toHaveBeenCalled();
+  expect(mockSonos.play).not.toHaveBeenCalled();
+  expect(usePlayer.getState().error).toContain('No M4A/AAC audio stream available');
+  expect(usePlayer.getState().busy).toBe(false);
+});
+
+test('an unplayable next video is not queued on Sonos', async () => {
+  mockNative.prepareStream.mockImplementation(async (id: string) => {
+    if (id.startsWith('x')) throw Object.assign(new Error('no audio'), { code: 'ERR_NO_AUDIO_STREAM' });
+    return { muxed: false };
+  });
+  enqueue([video('a'), video('x')]);
+  await playIndex(0);
+  await flush();
+  expect(mockSonos.setUri).toHaveBeenCalledTimes(1);
+  expect(mockSonos.setNextUri).not.toHaveBeenCalled();
 });

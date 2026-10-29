@@ -39,6 +39,11 @@ export type PlaylistPage = {
   nextPage: string | null;
 };
 
+export type PreparedStream = {
+  /** Only a muxed audio+video MP4 exists (e.g. "made for kids"); the proxy extracts the AAC track. */
+  muxed: boolean;
+};
+
 export type ProxyInfo = {
   /** e.g. http://192.168.1.23:8080 */
   baseUrl: string;

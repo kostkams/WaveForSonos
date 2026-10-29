@@ -46,8 +46,26 @@ export function resetProxy() {
   baseUrl = null;
 }
 
-/** Compatibility mode (ADTS remux) only applies to YouTube streams. */
-const usesAac = (item: QueueItem) => !isLocal(item) && useSettings.getState().streamFormat === 'aac';
+/**
+ * YouTube videos without an audio-only stream (e.g. "made for kids"): the proxy extracts the AAC
+ * track of the audio+video file, which only works as ADTS (the .aac route). Filled by prepare().
+ */
+const muxedIds = new Set<string>();
+
+/** ADTS streams (compatibility mode, or a muxed video) only apply to YouTube; local files stay as they are. */
+const usesAac = (item: QueueItem) =>
+  !isLocal(item) && (muxedIds.has(item.id) || useSettings.getState().streamFormat === 'aac');
+
+/**
+ * Resolves a YouTube stream on the phone before Sonos gets its URL, so a video without playable
+ * audio fails here with a message instead of silently on the speaker. Also learns whether it is muxed.
+ */
+async function prepare(item: QueueItem): Promise<void> {
+  if (isLocal(item)) return;
+  const { muxed } = await Native.prepareStream(item.id);
+  if (muxed) muxedIds.add(item.id);
+  else muxedIds.delete(item.id);
+}
 
 /** Tells two queue entries of the same track apart in our stream URLs (the proxy ignores it). */
 function entryTag(item: QueueItem): string {
@@ -57,9 +75,9 @@ function entryTag(item: QueueItem): string {
 function streamUrl(base: string, item: QueueItem, startSec?: number | null): string {
   const tag = `q=${encodeURIComponent(entryTag(item))}`;
   if (isLocal(item)) return `${base}/local/${item.id}.${item.ext ?? 'mp3'}?${tag}`;
-  const fmt = useSettings.getState().streamFormat;
-  const url = `${base}/stream/${item.id}.${fmt}?${tag}`;
-  return fmt === 'aac' && startSec ? `${url}&start=${Math.floor(startSec)}` : url;
+  const aac = usesAac(item);
+  const url = `${base}/stream/${item.id}.${aac ? 'aac' : 'm4a'}?${tag}`;
+  return aac && startSec ? `${url}&start=${Math.floor(startSec)}` : url;
 }
 
 const LOCAL_MIME: Record<string, string> = {
@@ -198,7 +216,8 @@ export async function playIndex(i: number, startSec?: number | null): Promise<vo
   lastState = null;
   player().set({ index: i, busy: true, error: null, positionSec: startSec ?? 0, durationSec: item.durationSec, foreign: false });
   try {
-    const [base, ip] = await Promise.all([proxyBase(), ensureTargetIp()]);
+    // Nothing is sent to Sonos when the video has no playable stream (prepare rejects → error).
+    const [base, ip] = await Promise.all([proxyBase(), ensureTargetIp(), prepare(item)]);
     if (stale()) return;
     const uri = streamUrl(base, item, startSec);
     userStopped = false;
@@ -254,6 +273,19 @@ async function queueNextOnSonos() {
   }
   if (nextQueuedFor === item.key) return;
   nextQueuedFor = item.key;
+  try {
+    // Decides the stream format (muxed videos need the .aac route).
+    await prepare(item);
+  } catch {
+    // Not playable: queue nothing; when it is due, playIndex reports the error.
+    if (nextQueuedFor === item.key && sonosHasNext) {
+      sonosHasNext = false;
+      await sonos.clearNextUri(ip).catch(() => undefined);
+    }
+    return;
+  }
+  // The queue changed (a newer call takes care of the next slot) or playback was stopped meanwhile.
+  if (nextQueuedFor !== item.key || !baseUrl) return;
   sonosHasNext = true;
   try {
     const uri = streamUrl(baseUrl, item);

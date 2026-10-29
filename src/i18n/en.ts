@@ -225,6 +225,13 @@ export const en: Record<TranslationKey, string> = {
   'mylist.deleteTitle': 'Delete “{name}”?',
   'mylist.deleteText': 'The playlist will be deleted from this phone. The tracks themselves stay on YouTube.',
 
+  // playback errors (native error codes)
+  'error.noAudio': 'No playable audio is available for this video.',
+  'error.ageRestricted': 'This video is age-restricted and cannot be played.',
+  'error.geoRestricted': 'This video is not available in your country.',
+  'error.unavailable': 'This video is unavailable.',
+  'error.botCheck': 'YouTube is blocking requests right now. Please try again later.',
+
   // add-to-playlist sheet
   'add.title': 'Add to playlist',
   'add.nothing': 'Nothing selected to add.',

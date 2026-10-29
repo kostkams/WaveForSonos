@@ -1,4 +1,4 @@
-import { t } from '@/i18n';
+import { t, type TranslationKey } from '@/i18n';
 import { Native } from '@/native';
 import * as sonos from '@/sonos';
 import { useSettings } from '@/state/settingsStore';
@@ -234,7 +234,19 @@ export async function setGroupVolume(volume: number): Promise<void> {
   }
 }
 
+/** Native error codes (see YouTubeRepository.mapError) with a message the user can act on. */
+const CODE_TEXT: Record<string, TranslationKey> = {
+  ERR_NO_AUDIO_STREAM: 'error.noAudio',
+  ERR_YOUTUBE_AGE_RESTRICTED: 'error.ageRestricted',
+  ERR_YOUTUBE_GEO_RESTRICTED: 'error.geoRestricted',
+  ERR_YOUTUBE_UNAVAILABLE: 'error.unavailable',
+  ERR_YOUTUBE_BOT_CHECK: 'error.botCheck',
+  ERR_YOUTUBE_RECAPTCHA: 'error.botCheck',
+};
+
 export function errorText(e: unknown): string {
+  const code = typeof e === 'object' && e !== null ? (e as { code?: unknown }).code : undefined;
+  if (typeof code === 'string' && Object.prototype.hasOwnProperty.call(CODE_TEXT, code)) return t(CODE_TEXT[code]);
   if (e instanceof Error) return e.message;
   return String(e);
 }

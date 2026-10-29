@@ -38,7 +38,8 @@ jest.mock('@/sonos', () => ({
   getGroupVolume: jest.fn(async () => 20),
 }));
 
-import { discover, ensureTargetIp, onLeadChange, toggleRoom } from '../speakers';
+import { discover, ensureTargetIp, errorText, onLeadChange, toggleRoom } from '../speakers';
+import { useSettings } from '@/state/settingsStore';
 import { groupOf, useSpeakers } from '@/state/speakerStore';
 
 const mockNative = (jest.requireMock('@/native') as { Native: Record<string, jest.Mock> }).Native;
@@ -70,4 +71,15 @@ test('deselecting the lead moves the group to the next room and releases the old
   expect(groupOf(groups, 'A')?.members.map((m) => m.uuid)).toEqual(['A']);
   expect(handler).toHaveBeenCalledWith('10.0.0.1');
   onLeadChange(null);
+});
+
+test('errorText translates known native error codes and keeps other messages', () => {
+  const coded = (code: string) => Object.assign(new Error('raw native message'), { code });
+  useSettings.setState({ language: 'de' });
+  expect(errorText(coded('ERR_NO_AUDIO_STREAM'))).toBe('Für dieses Video ist kein abspielbarer Ton verfügbar.');
+  useSettings.setState({ language: 'en' });
+  expect(errorText(coded('ERR_NO_AUDIO_STREAM'))).toBe('No playable audio is available for this video.');
+  expect(errorText(coded('ERR_NETWORK'))).toBe('raw native message');
+  expect(errorText(coded('toString'))).toBe('raw native message');
+  expect(errorText('plain')).toBe('plain');
 });

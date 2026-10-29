@@ -22,7 +22,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * YouTube audio for Sonos speakers.
  *
  *  GET|HEAD /stream/<id>.m4a          – byte-exact M4A passthrough with Range support
- *  GET|HEAD /stream/<id>.aac?start=s  – fMP4 → ADTS remux (compatibility mode)
+ *  GET|HEAD /stream/<id>.aac?start=s  – fMP4 → ADTS remux (compatibility mode); for videos
+ *                                       without an audio-only stream (muxed itag 18) the AAC
+ *                                       track is extracted from the progressive MP4 (also for .m4a)
  *  GET|HEAD /local/<id>.<ext>          – local audio file (base64url content URI) with Range support
  *  GET|HEAD /local-art/<sha1>.jpg     – embedded cover art of a local file
  *  GET      /health                   – "ok"
@@ -216,6 +218,11 @@ class StreamProxyServer {
 
   private fun serveM4a(videoId: String, req: HttpRequest, out: OutputStream, head: Boolean) {
     val audio = resolveOrError(videoId, out, head) ?: return
+    if (audio.muxed) {
+      // No audio-only M4A exists: Sonos still gets the audio, as ADTS.
+      serveMuxedAdts(videoId, audio, req, out, head)
+      return
+    }
     val total = audio.contentLength
     if (total <= 0) {
       sendText(out, 502, "Bad Gateway", "unknown content length", head)
@@ -260,8 +267,12 @@ class StreamProxyServer {
 
   private fun serveAdts(videoId: String, req: HttpRequest, out: OutputStream, head: Boolean) {
     val audio = resolveOrError(videoId, out, head) ?: return
+    if (audio.muxed) {
+      serveMuxedAdts(videoId, audio, req, out, head)
+      return
+    }
     val total = audio.contentLength
-    val startSec = req.query["start"]?.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+    val startSec = startSeconds(req)
 
     // Fetch the prefix (ftyp + moov + sidx) and parse it.
     var prefixLen = if (audio.indexEnd > 0) audio.indexEnd.toLong() + 1 else 128L * 1024
@@ -306,6 +317,28 @@ class StreamProxyServer {
     UpstreamInputStream(videoId, fragmentOffset, end).use { upstream ->
       Fmp4.remuxToAdts(init, java.io.BufferedInputStream(upstream, 64 * 1024), out, startTicksMedia)
     }
+  }
+
+  private fun startSeconds(req: HttpRequest): Double =
+    req.query["start"]?.toDoubleOrNull()?.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+
+  /** ADTS from the AAC track of a progressive audio+video MP4 (same response shape as serveAdts). */
+  private fun serveMuxedAdts(videoId: String, audio: ResolvedAudio, req: HttpRequest, out: OutputStream, head: Boolean) {
+    val table = try {
+      MuxedAudio.sampleTable(audio)
+    } catch (e: IOException) {
+      Log.w(TAG, "Could not read the audio sample table of $videoId", e)
+      sendText(out, 502, "Bad Gateway", "could not parse mp4: ${e.message}", head)
+      return
+    }
+    writeHead(out, 200, "OK", linkedMapOf(
+      "Content-Type" to "audio/aac",
+      "Cache-Control" to "no-cache",
+      "Accept-Ranges" to "none"
+    ))
+    if (head) return
+    out.flush()
+    MuxedAudio.streamAdts(videoId, table, startSeconds(req), out)
   }
 
   private fun serveLocal(id: String, ext: String, req: HttpRequest, out: OutputStream, head: Boolean) {
