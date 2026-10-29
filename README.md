@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="../../actions/workflows/android.yml"><img alt="Android build" src="https://github.com/kostkams/WaveForSonos/actions/workflows/android.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: GPL v3" src="https://img.shields.io/badge/license-GPLv3-blue.svg"></a>
   <img alt="Platform: Android" src="https://img.shields.io/badge/platform-Android%207%2B-3ddc84.svg">
   <img alt="Languages" src="https://img.shields.io/badge/languages-English%20%7C%20Deutsch-8F4C38.svg">
@@ -130,6 +131,14 @@ modules/sonos-tube-native/    Kotlin Expo module: NewPipeExtractor, stream proxy
 plugins/withSonosTube.js      Expo config plugin (intent filters, cleartext HTTP, desugaring, signing)
 fastlane/metadata/android/    store texts for F-Droid / IzzyOnDroid
 ```
+
+## Releasing
+
+1. Raise `expo.version` and `expo.android.versionCode` in `app.json`.
+2. Add release notes as `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` (and `de-DE`).
+3. Commit, then tag and push: `git tag v1.0.1 && git push origin v1.0.1`.
+
+The [Android build](.github/workflows/android.yml) workflow checks the code, builds the signed universal APK and publishes the GitHub release with a SHA-256 checksum. Every push to `main` produces a test APK (arm64) as a workflow artifact.
 
 ## Contributing
 

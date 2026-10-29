@@ -18,7 +18,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "de.tetranova.waveforsonos"
+      "package": "de.tetranova.waveforsonos",
+      "versionCode": 1
     },
     "web": {
       "output": "server",
