@@ -1,0 +1,14 @@
+# F-Droid metadata for the self-hosted repository (https://kostkams.github.io/WaveForSonos/repo).
+# Texts, icon and changelogs come from fastlane/metadata/android/ (copied in by the workflow).
+AuthorName: Tetranova
+Categories:
+  - Multimedia
+License: GPL-3.0-or-later
+WebSite: https://github.com/kostkams/WaveForSonos
+SourceCode: https://github.com/kostkams/WaveForSonos
+IssueTracker: https://github.com/kostkams/WaveForSonos/issues
+Changelog: https://github.com/kostkams/WaveForSonos/releases
+AntiFeatures:
+  NonFreeNet:
+    en-US: Streams audio from YouTube, a non-free network service.
+    de-DE: Spielt Audio von YouTube ab, einem unfreien Netzwerkdienst.

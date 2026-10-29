@@ -22,10 +22,11 @@
 
 ## Features
 
-**Search or share**
+**Search, share or play your own files**
 - Search for tracks, artists and playlists in the app
 - Share a video from another app with *Wave for Sonos*, and it starts playing on your speakers
 - Paste links from the clipboard
+- Play audio files from your phone (MP3, M4A, FLAC, WAV, OGG) on Sonos
 
 **Queue, playlists and history**
 - A real queue with shuffle, repeat and autoplay
@@ -65,9 +66,9 @@ The phone has to stay on the same Wi-Fi as the speakers while music is playing. 
 
 | Source | Notes |
 |---|---|
-| **IzzyOnDroid** (F-Droid compatible) | Add the [IzzyOnDroid repository](https://apt.izzysoft.de/fdroid/) to your F-Droid client and search for *Wave for Sonos*. *(pending)* |
+| **F-Droid** (own repository) | In the F-Droid app (or Neo Store / Droid-ify): *Settings → Repositories → +* and add `https://kostkams.github.io/WaveForSonos/repo?fingerprint=d8c5c5be6b6a6ffaf70427fe3e95e105518b10b8c3fd14625ef401ecdc42de83` – or open [kostkams.github.io/WaveForSonos](https://kostkams.github.io/WaveForSonos/) on your phone and tap *Add to F-Droid*. |
 | **GitHub Releases** | Download `wave-for-sonos-<version>.apk` from [Releases](../../releases) and verify it against the `.sha256` file. |
-| **Obtainium** | Add this repository URL to [Obtainium](https://github.com/ImranR98/Obtainium) to get updates automatically. |
+| **Obtainium** | [Add to Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/kostkams/WaveForSonos) – or add `https://github.com/kostkams/WaveForSonos` as a new app. Obtainium checks the GitHub releases for updates. |
 
 Requirements: Android 7.0 or newer and Sonos speakers on the same Wi-Fi network (S2 and S1 speakers that speak UPnP).
 
@@ -129,7 +130,8 @@ src/i18n/                     German and English texts
 src/theme/                    Material 3 color schemes
 modules/sonos-tube-native/    Kotlin Expo module: NewPipeExtractor, stream proxy, SSDP, media session
 plugins/withSonosTube.js      Expo config plugin (intent filters, cleartext HTTP, desugaring, signing)
-fastlane/metadata/android/    store texts for F-Droid / IzzyOnDroid
+fastlane/metadata/android/    store texts (F-Droid repo, release notes)
+fdroid/metadata/              F-Droid app metadata for the self-hosted repository
 ```
 
 ## Releasing
@@ -138,11 +140,15 @@ fastlane/metadata/android/    store texts for F-Droid / IzzyOnDroid
 2. Add release notes as `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` (and `de-DE`).
 3. Commit, then tag and push: `git tag v1.0.1 && git push origin v1.0.1`.
 
-The [Android build](.github/workflows/android.yml) workflow checks the code, builds the signed universal APK and publishes the GitHub release with a SHA-256 checksum. Every push to `main` produces a test APK (arm64) as a workflow artifact.
+The [Android build](.github/workflows/android.yml) workflow checks the code, builds the signed universal APK, publishes the GitHub release with a SHA-256 checksum and updates the F-Droid repository on GitHub Pages. Every push to `main` produces a test APK (arm64) as a workflow artifact.
 
 ## Contributing
 
 Issues and pull requests are welcome. Please run `npm test`, `npm run typecheck` and `npm run lint` before opening a pull request. New UI texts go into both `src/i18n/de.ts` and `src/i18n/en.ts`; TypeScript reports a missing translation.
+
+## AI assistance
+
+This app was developed with extensive help from an AI coding assistant (Anthropic's Claude): large parts of the code, tests and texts were generated with it and then reviewed, tested and adjusted. Commits made this way carry a `Co-Authored-By: Claude` line. Please keep this in mind when you evaluate or reuse the code.
 
 ## Disclaimer
 
@@ -172,7 +178,9 @@ It uses [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) (GPL
 - Material-3-Design in Hell und Dunkel, fünf Farbschemata, Deutsch und Englisch
 - Kein Konto, keine Werbung, kein Tracking
 
-**Installation:** über das [IzzyOnDroid-Repository](https://apt.izzysoft.de/fdroid/) in F-Droid *(in Vorbereitung)*, als APK aus den [Releases](../../releases) oder automatisch aktualisiert mit Obtainium. Handy und Lautsprecher müssen im selben WLAN sein.
+**Installation:** über das eigene F-Droid-Repository (`https://kostkams.github.io/WaveForSonos/repo`, in der F-Droid-App unter *Einstellungen → Paketquellen* hinzufügen), als APK aus den [Releases](../../releases) oder mit automatischen Updates über [Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/kostkams/WaveForSonos). Handy und Lautsprecher müssen im selben WLAN sein.
+
+Die App wurde mit umfangreicher Hilfe eines KI-Programmierassistenten (Claude von Anthropic) entwickelt.
 
 Spielt ein Titel nicht, hilft meist **Einstellungen → Kompatibilitätsmodus**.
 

@@ -171,3 +171,122 @@ jobs:
             --title "Wave for Sonos ${{ steps.version.outputs.name }}" \
             --notes-file release-notes.md \
             --verify-tag
+
+  # Self-hosted F-Droid repository on GitHub Pages: https://kostkams.github.io/WaveForSonos/repo
+  # Rebuilt from the last GitHub releases on every release tag.
+  # Needs secrets FDROID_KEYSTORE_BASE64 + FDROID_KEYSTORE_PASS and Pages source "GitHub Actions".
+  fdroid-repo:
+    name: F-Droid repository
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}repo
+    env:
+      APP_ID: de.tetranova.waveforsonos
+      REPO_URL: https://kostkams.github.io/WaveForSonos/repo
+      # SHA-256 of the repo signing certificate (public; lets F-Droid verify the repo)
+      REPO_FINGERPRINT: d8c5c5be6b6a6ffaf70427fe3e95e105518b10b8c3fd14625ef401ecdc42de83
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install fdroidserver
+        run: pip install --quiet fdroidserver
+
+      - name: Prepare repository
+        env:
+          FDROID_KEYSTORE_BASE64: ${{ secrets.FDROID_KEYSTORE_BASE64 }}
+          FDROID_KEYSTORE_PASS: ${{ secrets.FDROID_KEYSTORE_PASS }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$FDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::Secret FDROID_KEYSTORE_BASE64 is not set"
+            exit 1
+          fi
+          mkdir -p site/fdroid/repo site/fdroid/metadata
+          cd site/fdroid
+          echo "$FDROID_KEYSTORE_BASE64" | base64 -d > keystore.p12
+          cat > config.yml <<EOF
+          repo_url: $REPO_URL
+          repo_name: Wave for Sonos
+          repo_description: >-
+            Official repository of Wave for Sonos – play music, podcasts, playlists and local files
+            from your Android phone on your Sonos speakers.
+          repo_icon: icon.png
+          archive_older: 0
+          keystore: keystore.p12
+          repo_keyalias: repokey
+          keystorepass: "$FDROID_KEYSTORE_PASS"
+          keypass: "$FDROID_KEYSTORE_PASS"
+          keydname: CN=Wave for Sonos F-Droid repo, O=Tetranova, C=DE
+          sdk_path: $ANDROID_HOME
+          EOF
+          chmod 600 config.yml keystore.p12
+          # App metadata + localized texts, icon and changelogs from fastlane
+          cp "$GITHUB_WORKSPACE/fdroid/metadata/$APP_ID.yml" metadata/
+          mkdir -p "metadata/$APP_ID"
+          cp -r "$GITHUB_WORKSPACE/fastlane/metadata/android/." "metadata/$APP_ID/"
+          mkdir -p repo/icons
+          cp "$GITHUB_WORKSPACE/fastlane/metadata/android/en-US/images/icon.png" repo/icons/icon.png
+          # APKs of the last three releases
+          for tag in $(gh release list --repo "$GITHUB_REPOSITORY" --limit 3 --json tagName --jq '.[].tagName'); do
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern '*.apk' --dir repo --skip-existing
+          done
+          ls -la repo
+
+      - name: Build F-Droid index
+        working-directory: site/fdroid
+        run: |
+          fdroid update --verbose
+          rm -f keystore.p12 config.yml
+          rm -rf tmp
+
+      - name: Landing page
+        run: |
+          cat > site/index.html <<'EOF'
+          <!doctype html>
+          <html lang="en">
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Wave for Sonos – F-Droid repository</title>
+          <style>
+            body { font-family: system-ui, sans-serif; max-width: 640px; margin: 48px auto; padding: 0 16px; line-height: 1.5; color: #231917; background: #FFF8F6; }
+            code { background: #F1DFDA; padding: 2px 6px; border-radius: 6px; word-break: break-all; }
+            a.button { display: inline-block; background: #8F4C38; color: #fff; padding: 12px 20px; border-radius: 24px; text-decoration: none; }
+          </style>
+          <h1>Wave for Sonos</h1>
+          <p>Add this repository to the F-Droid app (or Neo Store / Droid-ify) to install Wave for Sonos and get updates automatically.</p>
+          <p><a class="button" href="fdroidrepos://kostkams.github.io/WaveForSonos/repo?fingerprint=d8c5c5be6b6a6ffaf70427fe3e95e105518b10b8c3fd14625ef401ecdc42de83">Add to F-Droid</a></p>
+          <p>Repository address:<br><code>https://kostkams.github.io/WaveForSonos/repo</code></p>
+          <p>Fingerprint:<br><code>d8c5c5be6b6a6ffaf70427fe3e95e105518b10b8c3fd14625ef401ecdc42de83</code></p>
+          <p>Source code, releases and the APK: <a href="https://github.com/kostkams/WaveForSonos">github.com/kostkams/WaveForSonos</a></p>
+          </html>
+          EOF
+          touch site/.nojekyll
+          # Serve the repo at /repo (not /fdroid/repo)
+          mv site/fdroid/repo site/repo
+          rm -rf site/fdroid
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
