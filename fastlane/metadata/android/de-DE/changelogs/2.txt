@@ -1,0 +1,5 @@
+• Kinder-Videos (z. B. Märchen) laufen jetzt auf Sonos
+• Verständliche Meldung, wenn ein Video keinen abspielbaren Ton hat
+• Player-Bedienelemente überlappen auf kleineren Displays nicht mehr
+• Viele Stabilitäts-Fixes: Warteschlange, Raumgruppierung, Links teilen, lokale Dateien
+• Lokaler Stream-Server gegen fehlerhafte Anfragen und Dateizugriffe aus dem Netz abgesichert

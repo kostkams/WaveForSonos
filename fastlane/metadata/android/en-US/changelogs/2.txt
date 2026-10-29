@@ -1,0 +1,5 @@
+• Kids videos (e.g. fairy tales) now play on Sonos
+• Clear error message when a video has no playable audio
+• Player controls no longer overlap on smaller screens
+• Many stability fixes: playback queue, room grouping, sharing links, local files
+• Local stream server hardened against malformed requests and file access from the network
