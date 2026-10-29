@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Share, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Banner, Button, IconButton, Snackbar, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -39,7 +39,12 @@ export default function PlayerScreen() {
   }, []);
 
   const playing = transport === 'PLAYING' || transport === 'TRANSITIONING';
-  const art = Math.min(width - 48, height * 0.38);
+  const avail = width - 48;
+  // Leave room for header, title, sliders, controls and bottom bar (~560 dp) so nothing overlaps on small screens.
+  const art = Math.max(96, Math.min(avail, height * 0.38, height - 560 - (foreign ? 96 : 0)));
+  // Four side buttons take ~180 dp; the play button gets what's left (72–104 dp).
+  const playWidth = Math.max(72, Math.min(104, avail - 188));
+  const playHeight = playWidth >= 96 ? 80 : 64;
   const shown = dragPos ?? position;
 
   return (
@@ -76,7 +81,7 @@ export default function PlayerScreen() {
       </Banner>
 
       {item ? (
-        <View style={styles.body}>
+        <ScrollView style={styles.flex} contentContainerStyle={styles.body} bounces={false}>
           <Thumb uri={item.thumbnail} width={art} height={art} radius={28} style={{ alignSelf: 'center' }} />
 
           <View style={{ gap: 4 }}>
@@ -111,10 +116,11 @@ export default function PlayerScreen() {
           </View>
 
           <View style={styles.controls}>
-            <IconButton icon="rewind-10" size={28} onPress={() => void skipBy(-10)} accessibilityLabel={t('player.back10')} />
+            <IconButton icon="rewind-10" size={28} style={styles.ctl} onPress={() => void skipBy(-10)} accessibilityLabel={t('player.back10')} />
             <IconButton
               icon="skip-previous"
               size={30}
+              style={styles.ctl}
               mode="contained"
               containerColor={colors.surfaceContainerHighest}
               onPress={() => void previous()}
@@ -125,19 +131,20 @@ export default function PlayerScreen() {
               onPress={() => void togglePlay()}
               loading={busy}
               style={styles.play}
-              contentStyle={styles.playContent}
+              contentStyle={{ width: playWidth, height: playHeight }}
               accessibilityLabel={playing ? t('common.pause') : t('common.play')}>
               {busy ? '' : <MaterialCommunityIcons name={playing ? 'pause' : 'play'} size={40} color={colors.onPrimary} />}
             </Button>
             <IconButton
               icon="skip-next"
               size={30}
+              style={styles.ctl}
               mode="contained"
               containerColor={colors.surfaceContainerHighest}
               onPress={() => void next()}
               accessibilityLabel={t('common.next')}
             />
-            <IconButton icon="fast-forward-10" size={28} onPress={() => void skipBy(10)} accessibilityLabel={t('player.forward10')} />
+            <IconButton icon="fast-forward-10" size={28} style={styles.ctl} onPress={() => void skipBy(10)} accessibilityLabel={t('player.forward10')} />
           </View>
 
           <View style={styles.volume}>
@@ -145,7 +152,7 @@ export default function PlayerScreen() {
             <M3Slider value={groupVolume ?? 0} max={100} onCommit={(v) => void setGroupVolume(v)} disabled={groupVolume === null} label={t('player.groupVolume')} />
             <MaterialCommunityIcons name="volume-high" size={24} color={colors.onSurfaceVariant} />
           </View>
-        </View>
+        </ScrollView>
       ) : (
         <View style={[styles.body, { justifyContent: 'center', alignItems: 'center' }]}>
           <Text variant="titleMedium" style={{ color: colors.onSurface }}>
@@ -189,11 +196,11 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, height: 64 },
   headerText: { flex: 1, alignItems: 'center', gap: 2 },
-  body: { flex: 1, paddingHorizontal: 24, paddingTop: 8, gap: 20 },
+  body: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 8, gap: 20 },
   times: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  ctl: { margin: 0 },
   play: { borderRadius: 28 },
-  playContent: { width: 104, height: 80 },
   volume: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   bottom: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingBottom: 16 },
 });

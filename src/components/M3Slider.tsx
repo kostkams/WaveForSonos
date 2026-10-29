@@ -18,7 +18,8 @@ export function M3Slider({ value, min = 0, max, onChange, onCommit, disabled, la
   const { colors } = useAppTheme();
   return (
     <Slider
-      style={[{ height: 44, flex: 1 }, style]}
+      // flexGrow (not flex: 1) keeps the 44 dp height when the slider sits in a column.
+      style={[{ height: 44, flexGrow: 1, flexShrink: 1 }, style]}
       value={value}
       minimumValue={min}
       maximumValue={Math.max(max, min + 1)}
