@@ -24,6 +24,24 @@ function parseTime(v: string | null): number | null {
   return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
 }
 
+/**
+ * True when the whole text is a single youtube.com / youtu.be URL that isn't a video or playlist
+ * (channel, feed, search, …). Such links come from "open with" (VIEW intents) and have nothing to play.
+ */
+export function isUnplayableYouTubeUrl(input: string): boolean {
+  const text = input.trim();
+  if (/\s/.test(text)) return false;
+  const raw = extractUrl(text);
+  if (!raw) return false;
+  let host: string;
+  try {
+    host = new URL(raw).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return (host === 'youtu.be' || YT_HOSTS.includes(host)) && !parseYouTubeLink(text);
+}
+
 /** Parses a YouTube link (or text containing one). Returns null when it isn't YouTube. */
 export function parseYouTubeLink(input: string): ParsedLink | null {
   // Only real links count. A bare 11-character word ("stratovario") looks exactly like a video id

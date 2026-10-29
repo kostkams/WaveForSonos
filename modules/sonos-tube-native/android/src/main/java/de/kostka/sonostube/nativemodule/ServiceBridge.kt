@@ -80,6 +80,12 @@ object ServiceBridge {
     return d
   }
 
+  /** Drops a waiter from [awaitPort] that is no longer interested (timeout, failed service start). */
+  @Synchronized
+  fun cancelWait(d: CompletableDeferred<Int>) {
+    waiters.remove(d)
+  }
+
   @Synchronized
   fun onProxyStarted(port: Int) {
     proxyPort = port

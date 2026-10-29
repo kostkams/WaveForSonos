@@ -14,9 +14,16 @@ import { isDuplicateShare } from '@/playback/shareDedupe';
 import { discover } from '@/playback/speakers';
 import { useSettings } from '@/state/settingsStore';
 import { buildTheme } from '@/theme/theme';
+import { isUnplayableYouTubeUrl } from '@/youtube/links';
+
+// Cold start from a link (share sheet on top) still gets the tabs underneath.
+export const unstable_settings = {
+  anchor: '(tabs)',
+};
 
 function openShared(text: string | null | undefined) {
-  if (!text || isDuplicateShare(text)) return;
+  // Channel / feed links opened via VIEW intent are handled by +native-intent (stay put).
+  if (!text || isUnplayableYouTubeUrl(text) || isDuplicateShare(text)) return;
   router.push({ pathname: '/share', params: { text } });
 }
 

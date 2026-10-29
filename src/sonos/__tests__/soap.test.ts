@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-import { buildEnvelope, soapCall, SonosError } from '..';
+import { buildEnvelope, hostFor, soapCall, SonosError } from '..';
 import { AVT, mockFetch, RC, soapFault, soapResponse } from '../__fixtures__/helpers';
 
 describe('soapCall', () => {
@@ -40,6 +40,14 @@ describe('soapCall', () => {
       'http://1.2.3.4:1400/MediaRenderer/GroupRenderingControl/Control',
       'http://1.2.3.4:1400/ZoneGroupTopology/Control',
     ]);
+  });
+
+  it('adds the default port only when none is given, including IPv6', () => {
+    expect(hostFor('1.2.3.4')).toBe('1.2.3.4:1400');
+    expect(hostFor('1.2.3.4:1443')).toBe('1.2.3.4:1443');
+    expect(hostFor('[fe80::1]')).toBe('[fe80::1]:1400');
+    expect(hostFor('[fe80::1]:1443')).toBe('[fe80::1]:1443');
+    expect(hostFor('fe80::1')).toBe('[fe80::1]:1400');
   });
 
   it('escapes argument values', () => {

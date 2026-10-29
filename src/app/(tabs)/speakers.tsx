@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Checkbox, IconButton, Snackbar, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +23,7 @@ export default function SpeakersScreen() {
   const speakers = allSpeakers(groups);
   const leadUuid = selected[0];
   const leadName = leadUuid ? speakerByUuid(groups, leadUuid)?.name : undefined;
+  const [drag, setDrag] = useState<{ uuid: string; v: number } | null>(null);
 
   useEffect(() => {
     void refreshTopology().then(refreshVolumes);
@@ -76,6 +77,8 @@ export default function SpeakersScreen() {
           const checked = selected.includes(sp.uuid);
           const status = statusOf(sp.uuid);
           const vol = volumes[sp.uuid] ?? 0;
+          // While dragging, the 3 s volume refresh must not snap the thumb back.
+          const shownVol = drag?.uuid === sp.uuid ? drag.v : vol;
           return (
             <View key={sp.uuid} style={[styles.card, { backgroundColor: checked ? colors.surfaceContainer : colors.surfaceContainerLow }]}>
               <View style={styles.cardTop}>
@@ -106,9 +109,19 @@ export default function SpeakersScreen() {
               </View>
               <View style={styles.volume}>
                 <MaterialCommunityIcons name="volume-high" size={20} color={colors.onSurfaceVariant} />
-                <M3Slider value={vol} max={100} onCommit={(v) => void setRoomVolume(sp.uuid, v)} label={t('speakers.volumeOf', { name: sp.name })} disabled={!checked} />
+                <M3Slider
+                  value={shownVol}
+                  max={100}
+                  onChange={(v) => setDrag({ uuid: sp.uuid, v })}
+                  onCommit={(v) => {
+                    setDrag(null);
+                    void setRoomVolume(sp.uuid, v);
+                  }}
+                  label={t('speakers.volumeOf', { name: sp.name })}
+                  disabled={!checked}
+                />
                 <Text variant="bodySmall" style={[styles.volText, { color: colors.onSurfaceVariant }]}>
-                  {vol}
+                  {Math.round(shownVol)}
                 </Text>
               </View>
             </View>

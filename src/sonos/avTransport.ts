@@ -44,6 +44,11 @@ export async function setNextUri(ip: string, uri: string, metadata = ''): Promis
   await av(ip, 'SetNextAVTransportURI', { NextURI: uri, NextURIMetaData: metadata });
 }
 
+/** Empty the gapless "next" slot so nothing follows the current track. */
+export async function clearNextUri(ip: string): Promise<void> {
+  await setNextUri(ip, '', '');
+}
+
 export async function play(ip: string): Promise<void> {
   await av(ip, 'Play', { Speed: 1 });
 }

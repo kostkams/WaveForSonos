@@ -2,6 +2,7 @@ package de.kostka.sonostube.nativemodule
 
 import android.util.Log
 import java.io.BufferedOutputStream
+import java.io.FilterOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -65,6 +66,9 @@ class StreamProxyServer {
           pool.execute {
             try {
               handle(client)
+            } catch (e: Exception) {
+              // Never let a bad request kill the app process (uncaught exceptions on pool threads do).
+              Log.w(TAG, "Error handling connection", e)
             } finally {
               openSockets.remove(client)
               try { client.close() } catch (_: IOException) {}
@@ -97,18 +101,35 @@ class StreamProxyServer {
 
   private class HttpRequest(val method: String, val path: String, val query: Map<String, String>, val headers: Map<String, String>)
 
+  /** Remembers whether any response bytes were written, so errors after the header just close the connection. */
+  private class TrackingOutputStream(inner: OutputStream) : FilterOutputStream(inner) {
+    var written = false
+      private set
+
+    override fun write(b: Int) {
+      written = true
+      out.write(b)
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+      if (len > 0) written = true
+      out.write(b, off, len)
+    }
+  }
+
   private fun handle(socket: Socket) {
-    socket.soTimeout = 30_000
-    socket.tcpNoDelay = true
-    val input = socket.getInputStream()
-    val out = BufferedOutputStream(socket.getOutputStream(), 64 * 1024)
-    val request = try {
-      readRequest(input) ?: return
+    val (request, out) = try {
+      socket.soTimeout = 30_000
+      socket.tcpNoDelay = true
+      val input = socket.getInputStream()
+      val stream = TrackingOutputStream(BufferedOutputStream(socket.getOutputStream(), 64 * 1024))
+      val req = readRequest(input) ?: return
+      // Writing can block for a long time while the speaker's buffer is full.
+      socket.soTimeout = 0
+      req to stream
     } catch (e: IOException) {
       return
     }
-    // Writing can block for a long time while the speaker's buffer is full.
-    socket.soTimeout = 0
     try {
       route(request, out)
       out.flush()
@@ -118,7 +139,10 @@ class StreamProxyServer {
       Log.w(TAG, "I/O error serving ${request.path}: ${e.message}")
     } catch (e: Exception) {
       Log.e(TAG, "Error serving ${request.path}", e)
-      try { sendText(out, 500, "Internal Server Error", e.message ?: "error", request.method == "HEAD") } catch (_: Exception) {}
+      // Once a status line / body is on the wire a 500 would corrupt the response: just close.
+      if (!out.written) {
+        try { sendText(out, 500, "Internal Server Error", e.message ?: "error", request.method == "HEAD") } catch (_: Exception) {}
+      }
     }
   }
 
@@ -144,13 +168,7 @@ class StreamProxyServer {
           if (c > 0) headers[line.substring(0, c).trim().lowercase(Locale.ROOT)] = line.substring(c + 1).trim()
         }
         val path = target.substringBefore('?')
-        val query = HashMap<String, String>()
-        target.substringAfter('?', "").split('&').filter { it.isNotEmpty() }.forEach {
-          val k = it.substringBefore('=')
-          val v = it.substringAfter('=', "")
-          query[URLDecoder.decode(k, "UTF-8")] = URLDecoder.decode(v, "UTF-8")
-        }
-        return HttpRequest(method, path, query, headers)
+        return HttpRequest(method, path, parseQuery(target.substringAfter('?', "")), headers)
       }
     }
   }
@@ -296,6 +314,12 @@ class StreamProxyServer {
       sendText(out, 400, "Bad Request", "bad id", head)
       return
     }
+    // The proxy is reachable from the whole LAN: only serve files the user actually picked.
+    if (!LocalAudio.isServable(uri)) {
+      Log.w(TAG, "refusing to serve non-picked uri")
+      sendText(out, 403, "Forbidden", "forbidden", head)
+      return
+    }
     // Probe the length first, then reopen at the requested offset.
     val total = try {
       LocalAudio.open(uri, 0).use { it.length }
@@ -385,5 +409,17 @@ class StreamProxyServer {
     private val LOCAL_PATH = Regex("^/local/([A-Za-z0-9_-]{8,4000})\\.([a-z0-9]{2,5})$")
     private val LOCAL_ART_PATH = Regex("^/local-art/([0-9a-f]{40}\\.jpg)$")
     private val STREAM_PATH = Regex("^/stream/([A-Za-z0-9_-]{6,20})\\.(m4a|aac)$")
+
+    /** Decodes a raw query string; malformed parameters (e.g. bad `%` escapes) are skipped. */
+    internal fun parseQuery(raw: String): Map<String, String> {
+      val query = HashMap<String, String>()
+      raw.split('&').filter { it.isNotEmpty() }.forEach {
+        try {
+          query[URLDecoder.decode(it.substringBefore('='), "UTF-8")] = URLDecoder.decode(it.substringAfter('=', ""), "UTF-8")
+        } catch (_: IllegalArgumentException) {
+        }
+      }
+      return query
+    }
   }
 }

@@ -42,6 +42,7 @@ class ProxyService : Service() {
   private var artworkUrl: String? = null
   private var artwork: Bitmap? = null
   @Volatile private var serverStarting = false
+  @Volatile private var destroyed = false
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -127,12 +128,13 @@ class ProxyService : Service() {
       }
     }
     // Always (re-)enter the foreground state: required within a few seconds of startForegroundService().
-    goForeground()
+    if (!goForeground()) return START_NOT_STICKY
     ensureServer()
     return START_STICKY
   }
 
-  private fun goForeground() {
+  /** Returns false (and stops the service) when the foreground state could not be entered. */
+  private fun goForeground(): Boolean {
     val notification = buildNotification()
     try {
       ServiceCompat.startForeground(
@@ -145,10 +147,13 @@ class ProxyService : Service() {
       Log.e(TAG, "startForeground failed", e)
       ServiceBridge.onProxyFailed(e)
       stopSelf()
+      return false
     }
+    return true
   }
 
   private fun ensureServer() {
+    if (destroyed) return
     if (server.isRunning) {
       ServiceBridge.onProxyStarted(server.port)
       return
@@ -156,19 +161,25 @@ class ProxyService : Service() {
     if (serverStarting) return
     serverStarting = true
     acquireLocks()
-    Thread({
+    // Start and stop run on one process-wide serial executor, so a start never overtakes the stop of
+    // a destroyed service (no zombie server) and a quick restart finds port 8080 already released.
+    SERVER_EXECUTOR.execute {
       try {
-        YouTubeRepository.ensureInit()
-        val port = server.start(StreamProxyServer.DEFAULT_PORT)
-        ServiceBridge.onProxyStarted(port)
+        if (!destroyed) {
+          YouTubeRepository.ensureInit()
+          if (!destroyed) {
+            val port = server.start(StreamProxyServer.DEFAULT_PORT)
+            ServiceBridge.onProxyStarted(port)
+          }
+        }
       } catch (e: Exception) {
         Log.e(TAG, "Failed to start proxy", e)
         ServiceBridge.onProxyFailed(e)
-        mainHandler.post { shutdown() }
+        mainHandler.post { if (!destroyed) shutdown() }
       } finally {
         serverStarting = false
       }
-    }, "SonosTubeProxy-start").start()
+    }
   }
 
   private fun shutdown() {
@@ -181,7 +192,12 @@ class ProxyService : Service() {
     ServiceBridge.remoteVolumeChanged = null
     ServiceBridge.languageChanged = null
     volumeProvider = null
-    Thread { server.stop() }.start()
+    destroyed = true
+    SERVER_EXECUTOR.execute {
+      server.stop()
+      // Again after the stop: a start that was already running may have reported its port meanwhile.
+      ServiceBridge.onProxyStopped()
+    }
     ServiceBridge.onProxyStopped()
     releaseLocks()
     session.isActive = false
@@ -380,5 +396,9 @@ class ProxyService : Service() {
     const val ACTION_STOP = "de.tetranova.waveforsonos.action.STOP"
     /** Volume change per hardware key press (Sonos scale 0–100). */
     const val VOLUME_STEP = 2
+
+    /** Serialises proxy start/stop across service instances (see [ensureServer]). */
+    private val SERVER_EXECUTOR: java.util.concurrent.ExecutorService =
+      java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "SonosTubeProxy-lifecycle").apply { isDaemon = true } }
   }
 }

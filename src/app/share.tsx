@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Button, Chip, Switch, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,8 +40,10 @@ export default function ShareSheet() {
     let cancelled = false;
     (async () => {
       try {
+        // With a playlist, a private / removed video must not hide the (working) playlist.
+        const videoReq = link.videoId ? Native.getVideoInfo(link.videoId) : Promise.resolve(null);
         const [video, pl] = await Promise.all([
-          link.videoId ? Native.getVideoInfo(link.videoId) : Promise.resolve(null),
+          link.playlistId ? videoReq.catch(() => null) : videoReq,
           link.playlistId ? Native.getPlaylist(link.playlistId, null).catch(() => null) : Promise.resolve(null),
         ]);
         if (cancelled) return;
@@ -71,9 +73,19 @@ export default function ShareSheet() {
     return data.video ? [data.video] : [];
   };
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
+  // Double taps (buttons / backdrop) must act once; a second router.back() pops the screen below.
+  const closed = useRef(false);
+  const busy = useRef(false);
+  const close = () => {
+    if (closed.current) return;
+    closed.current = true;
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  };
 
   const onPlay = async () => {
+    if (busy.current) return;
+    busy.current = true;
     setWorking(true);
     const list = items();
     const start = data?.video && list[0]?.id === data.video.id ? data.startSec : null;
@@ -82,6 +94,9 @@ export default function ShareSheet() {
   };
 
   const onQueue = () => {
+    if (busy.current) return;
+    busy.current = true;
+    setWorking(true);
     enqueue(items());
     close();
   };

@@ -121,8 +121,11 @@ object Fmp4 {
   private fun u16(b: ByteArray, o: Int): Int = ((b[o].toInt() and 0xFF) shl 8) or (b[o + 1].toInt() and 0xFF)
   private fun type(b: ByteArray, o: Int): String = String(b, o, 4, Charsets.ISO_8859_1)
 
-  /** A box inside [data]: [start] = header start, [payload] = first payload byte, [end] exclusive. */
-  data class Box(val type: String, val start: Int, val payload: Int, val end: Int)
+  /**
+   * A box inside [data]: [start] = header start, [payload] = first payload byte, [end] exclusive
+   * (clamped to the parsed range). [truncated] = the declared size extends beyond that range.
+   */
+  data class Box(val type: String, val start: Int, val payload: Int, val end: Int, val truncated: Boolean = false)
 
   fun children(data: ByteArray, from: Int, to: Int): List<Box> {
     val boxes = ArrayList<Box>()
@@ -140,7 +143,7 @@ object Fmp4 {
       }
       if (size < header) break
       val end = p.toLong() + size
-      boxes.add(Box(t, p, p + header, minOf(end, to.toLong()).toInt()))
+      boxes.add(Box(t, p, p + header, minOf(end, to.toLong()).toInt(), truncated = end > to))
       if (end > to) break
       p = end.toInt()
     }
@@ -154,12 +157,21 @@ object Fmp4 {
    * Parses the stream prefix (must contain ftyp + moov, ideally sidx).
    * [prefixFileOffset] is the absolute offset of data[0] (normally 0).
    */
-  fun parseHeader(data: ByteArray, prefixFileOffset: Long = 0): Mp4Header {
+  fun parseHeader(data: ByteArray, prefixFileOffset: Long = 0): Mp4Header = try {
+    parseHeaderUnchecked(data, prefixFileOffset)
+  } catch (e: IndexOutOfBoundsException) {
+    // Malformed / short prefix: report as I/O so the caller retries with a bigger prefix.
+    throw IOException("mp4 header malformed or truncated", e)
+  }
+
+  private fun parseHeaderUnchecked(data: ByteArray, prefixFileOffset: Long): Mp4Header {
     val top = children(data, 0, data.size)
     val moov = top.firstOrNull { it.type == "moov" } ?: throw IOException("moov box not found")
-    if (moov.end > data.size) throw IOException("moov box truncated")
+    if (moov.truncated) throw IOException("moov box truncated")
     val init = parseMoov(data, moov)
-    val sidxBox = top.firstOrNull { it.type == "sidx" && it.end <= data.size }
+    val sidxBox = top.firstOrNull { it.type == "sidx" }
+    // A cut-off sidx would give wrong seek offsets: let the caller fetch a bigger prefix.
+    if (sidxBox != null && sidxBox.truncated) throw IOException("sidx box truncated")
     val sidx = sidxBox?.let { parseSidx(data, it, prefixFileOffset) }
     val firstFragment = sidx?.firstFragmentOffset
       ?: top.firstOrNull { it.type == "moof" }?.let { prefixFileOffset + it.start }

@@ -42,8 +42,28 @@ object LocalAudio {
     null
   }
 
+  /** URIs picked by the user in this process (covers picks whose permission could not be persisted). */
+  private val pickedUris = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+  /**
+   * Whether the proxy may serve [uri]: only content URIs the user picked – in this process or with
+   * a persisted read grant. Anything else (file://, other providers' URIs) is refused, since the
+   * proxy is reachable from the whole LAN without authentication.
+   */
+  fun isServable(uri: Uri): Boolean {
+    if (uri.scheme?.lowercase() != "content") return false
+    val s = uri.toString()
+    if (s in pickedUris) return true
+    return try {
+      context.contentResolver.persistedUriPermissions.any { it.isReadPermission && it.uri.toString() == s }
+    } catch (e: Exception) {
+      false
+    }
+  }
+
   /** Keeps read access across restarts (only possible for ACTION_OPEN_DOCUMENT URIs). */
   fun persistPermission(uri: Uri) {
+    pickedUris.add(uri.toString())
     try {
       context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
     } catch (e: SecurityException) {
@@ -179,11 +199,26 @@ object LocalAudio {
   fun open(uri: Uri, start: Long): Opened {
     val afd = context.contentResolver.openAssetFileDescriptor(uri, "r")
       ?: throw java.io.FileNotFoundException("Cannot open $uri")
-    val length = afd.length.takeIf { it >= 0 } ?: afd.parcelFileDescriptor?.statSize?.takeIf { it >= 0 } ?: -1L
-    val input = FileInputStream(afd.fileDescriptor)
-    // AssetFileDescriptor may point into a bigger file; seek to its start + requested offset.
-    input.channel.position(afd.startOffset + start)
-    return Opened(input, length, afd)
+    var input: FileInputStream? = null
+    try {
+      val length = afd.length.takeIf { it >= 0 } ?: afd.parcelFileDescriptor?.statSize?.takeIf { it >= 0 } ?: -1L
+      input = FileInputStream(afd.fileDescriptor)
+      // AssetFileDescriptor may point into a bigger file; seek to its start + requested offset.
+      // (Skipped at 0 so non-seekable pipe descriptors still work for full reads.)
+      val target = afd.startOffset + start
+      if (target != 0L) input.channel.position(target)
+      return Opened(input, length, afd)
+    } catch (e: Exception) {
+      try {
+        input?.close()
+      } catch (_: Exception) {
+      }
+      try {
+        afd.close()
+      } catch (_: Exception) {
+      }
+      throw e
+    }
   }
 
   // endregion

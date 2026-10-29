@@ -59,10 +59,11 @@ export default function SearchScreen() {
     } finally {
       if (id === reqId.current) setLoading(false);
     }
-  }, []);
+    // Only called from handlers, never from an effect, so a new `t` can't trigger a re-search.
+  }, [t]);
 
   const loadMore = useCallback(async () => {
-    if (!nextPage || loading) return;
+    if (!nextPage || loading || !submitted) return;
     const id = reqId.current;
     setLoading(true);
     try {
@@ -74,7 +75,7 @@ export default function SearchScreen() {
       });
       setNextPage(page.nextPage);
     } catch {
-      setNextPage(null);
+      if (id === reqId.current) setNextPage(null);
     } finally {
       if (id === reqId.current) setLoading(false);
     }
@@ -111,8 +112,12 @@ export default function SearchScreen() {
             traileringIconAccessibilityLabel={t('search.pasteLabel')}
             onTraileringIconPress={() => void paste()}
             onClearIconPress={() => {
+              // Invalidate in-flight search / loadMore so they can't refill the cleared list.
+              reqId.current++;
               setItems([]);
               setSubmitted('');
+              setNextPage(null);
+              setLoading(false);
             }}
           />
           <IconButton icon="cog-outline" onPress={() => router.push('/settings')} accessibilityLabel={t('search.settings')} style={styles.cog} />

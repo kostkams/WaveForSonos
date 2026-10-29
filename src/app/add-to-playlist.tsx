@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,21 +22,38 @@ export default function AddToPlaylistSheet() {
   const [newName, setNewName] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
+  // Backdrop tap, the auto-close timer and repeated row taps must only ever close the sheet once,
+  // otherwise the second router.back() pops the screen underneath.
+  const closed = useRef(false);
+  const handled = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  const close = () => {
+    if (closed.current) return;
+    closed.current = true;
+    if (timer.current) clearTimeout(timer.current);
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  };
 
   const done = (msg: string) => {
     setResult(msg);
-    setTimeout(close, 900);
+    timer.current = setTimeout(close, 900);
   };
 
   const addTo = (id: string, name: string) => {
-    if (!pending) return;
+    if (!pending || handled.current) return;
+    handled.current = true;
     const n = addItems(id, pending.items);
     done(n === 0 ? t('add.already', { name }) : t('add.added', { tracks: tn('common.tracks', n), name }));
   };
 
   const createWith = () => {
-    if (!pending) return;
+    if (!pending || handled.current) return;
+    handled.current = true;
     const name = (newName ?? '').trim() || t('add.defaultName');
     create(name, pending.items);
     done(t('add.created', { name }));

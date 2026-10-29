@@ -112,11 +112,18 @@ class UpstreamInputStream(
         if ((e.code == 403 || e.code == 410) && !refreshed) {
           refreshed = true
           YouTubeRepository.invalidateAudio(videoId)
-          YouTubeRepository.resolveAudio(videoId, forceRefresh = true)
+          try {
+            YouTubeRepository.resolveAudio(videoId, forceRefresh = true)
+          } catch (re: YouTubeException) {
+            throw IOException("Re-resolving $videoId failed: ${re.message}", re)
+          }
           continue
         }
         if (e.code in 500..599 && attempt < 2) { attempt++; Thread.sleep(300L * attempt); continue }
         throw e
+      } catch (e: YouTubeException) {
+        // Callers treat upstream trouble as I/O errors (mid-stream: just close the connection).
+        throw IOException("Resolving $videoId failed: ${e.message}", e)
       } catch (e: IOException) {
         if (attempt < 2 && !closed) { attempt++; Thread.sleep(300L * attempt); continue }
         throw e

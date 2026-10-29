@@ -6,9 +6,19 @@ import { allSpeakers, groupOf, speakerByUuid, useSpeakers } from '@/state/speake
 
 const store = () => useSpeakers.getState();
 
-/** Finds Sonos speakers via SSDP and loads the zone topology. */
-export async function discover(): Promise<void> {
-  if (store().discovering) return;
+let discovery: Promise<void> | null = null;
+
+/** Finds Sonos speakers via SSDP and loads the zone topology. Concurrent calls share one run. */
+export function discover(): Promise<void> {
+  if (!discovery) {
+    discovery = doDiscover().finally(() => {
+      discovery = null;
+    });
+  }
+  return discovery;
+}
+
+async function doDiscover(): Promise<void> {
   store().set({ discovering: true, error: null });
   try {
     const found = await Native.discoverSonos(2500);
@@ -96,7 +106,8 @@ export function applyGrouping(): Promise<void> {
 }
 
 async function doApplyGrouping(): Promise<void> {
-  const { groups, selected } = store();
+  let { groups } = store();
+  const { selected } = store();
   if (!selected.length) return;
   const leadUuid = selected[0];
   const lead = speakerByUuid(groups, leadUuid);
@@ -107,6 +118,9 @@ async function doApplyGrouping(): Promise<void> {
   if (leadGroup && leadGroup.coordinatorUuid !== leadUuid) {
     await sonos.leaveGroup(lead.ip);
     changed = true;
+    // The lead now coordinates its own group; continue from the real topology.
+    await refreshTopology();
+    groups = store().groups;
   }
   for (const uuid of selected.slice(1)) {
     const sp = speakerByUuid(groups, uuid);
@@ -126,9 +140,19 @@ async function doApplyGrouping(): Promise<void> {
   if (changed) await refreshTopology();
 }
 
+type LeadChangeHandler = (oldLeadIp: string) => Promise<void> | void;
+let leadChangeHandler: LeadChangeHandler | null = null;
+
+/** Called after the leading room was deselected and the group moved to a new lead (the controller carries playback over). */
+export function onLeadChange(handler: LeadChangeHandler | null) {
+  leadChangeHandler = handler;
+}
+
 export async function toggleRoom(uuid: string): Promise<void> {
   const { selected } = store();
   const next = selected.includes(uuid) ? selected.filter((u) => u !== uuid) : [...selected, uuid];
+  // Deselecting the leading room: its group's playback has to move to the new lead.
+  const oldLeadIp = selected[0] === uuid && next.length > 0 ? currentTargetIp() : null;
   store().set({ selected: next, error: null });
   try {
     if (next.length === 0) {
@@ -140,6 +164,8 @@ export async function toggleRoom(uuid: string): Promise<void> {
       return;
     }
     await applyGrouping();
+    const newLeadIp = currentTargetIp();
+    if (oldLeadIp && newLeadIp && newLeadIp !== oldLeadIp) await leadChangeHandler?.(oldLeadIp);
     await refreshVolumes();
   } catch (e) {
     store().set({ error: errorText(e) });

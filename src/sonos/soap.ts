@@ -53,9 +53,12 @@ export function buildEnvelope(service: SonosService, action: string, args: SoapA
   );
 }
 
-function hostFor(ip: string): string {
-  // Allow "ip" or "ip:port"
-  return ip.includes(':') ? ip : `${ip}:${SONOS_PORT}`;
+export function hostFor(ip: string): string {
+  // Allow "ip", "ip:port", "[v6]", "[v6]:port" and a bare IPv6 address.
+  if (ip.startsWith('[')) return /\]:\d+$/.test(ip) ? ip : `${ip}:${SONOS_PORT}`;
+  const colons = ip.split(':').length - 1;
+  if (colons === 1) return ip;
+  return colons > 1 ? `[${ip}]:${SONOS_PORT}` : `${ip}:${SONOS_PORT}`;
 }
 
 /** Parse a SOAP fault body into a SonosError (or null if it isn't one). */

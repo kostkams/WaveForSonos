@@ -63,7 +63,10 @@ function buildIntentFilters() {
     category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }],
     data: [{ $: { 'android:mimeType': 'text/plain' } }],
   };
-  const view = {
+  // Only links parseYouTubeLink (src/youtube/links.ts) can play; channel / feed / search links
+  // stay with the YouTube app or browser. <data> elements of one filter are combined
+  // (scheme x host x path), so each host group with its own paths needs its own filter.
+  const view = (hosts, pathPrefixes) => ({
     action: [{ $: { 'android:name': 'android.intent.action.VIEW' } }],
     category: [
       { $: { 'android:name': 'android.intent.category.DEFAULT' } },
@@ -72,10 +75,19 @@ function buildIntentFilters() {
     data: [
       { $: { 'android:scheme': 'https' } },
       { $: { 'android:scheme': 'http' } },
-      ...YOUTUBE_HOSTS.map((host) => ({ $: { 'android:host': host } })),
+      ...hosts.map((host) => ({ $: { 'android:host': host } })),
+      ...pathPrefixes.map((p) => ({ $: { 'android:pathPrefix': p } })),
     ],
-  };
-  return [send, view];
+  });
+  return [
+    send,
+    view(
+      ['youtube.com', 'www.youtube.com', 'm.youtube.com'],
+      ['/watch', '/shorts/', '/live/', '/playlist', '/embed/', '/v/', '/e/']
+    ),
+    view(['music.youtube.com'], ['/watch', '/playlist']),
+    view(['youtu.be'], []),
+  ];
 }
 
 /** True for intent filters this plugin added earlier (keeps the plugin idempotent). */

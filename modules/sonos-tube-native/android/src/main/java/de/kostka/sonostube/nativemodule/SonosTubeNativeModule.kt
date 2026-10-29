@@ -146,20 +146,25 @@ class SonosTubeNativeModule : Module() {
       val ctx = context
       requestNotificationPermissionIfNeeded()
       val deferred = ServiceBridge.awaitPort()
-      try {
-        val intent = Intent(ctx, ProxyService::class.java).setAction(ProxyService.ACTION_START)
-        ContextCompat.startForegroundService(ctx, intent)
-      } catch (e: Exception) {
-        throw CodedException("ERR_PROXY_START", "Could not start the foreground service: ${e.message}", e)
-      }
       val port = try {
-        withTimeout(15_000) { deferred.await() }
-      } catch (e: TimeoutCancellationException) {
-        throw CodedException("ERR_PROXY_TIMEOUT", "Proxy did not start within 15 s", e)
-      } catch (e: CodedException) {
-        throw e
-      } catch (e: Exception) {
-        throw CodedException("ERR_PROXY_START", "Proxy failed to start: ${e.message}", e)
+        try {
+          val intent = Intent(ctx, ProxyService::class.java).setAction(ProxyService.ACTION_START)
+          ContextCompat.startForegroundService(ctx, intent)
+        } catch (e: Exception) {
+          throw CodedException("ERR_PROXY_START", "Could not start the foreground service: ${e.message}", e)
+        }
+        try {
+          withTimeout(15_000) { deferred.await() }
+        } catch (e: TimeoutCancellationException) {
+          throw CodedException("ERR_PROXY_TIMEOUT", "Proxy did not start within 15 s", e)
+        } catch (e: CodedException) {
+          throw e
+        } catch (e: Exception) {
+          throw CodedException("ERR_PROXY_START", "Proxy failed to start: ${e.message}", e)
+        }
+      } finally {
+        // No-op when the deferred was completed; otherwise it would stay in the waiter list forever.
+        ServiceBridge.cancelWait(deferred)
       }
       val ip = withContext(Dispatchers.IO) { NetworkUtils.getLocalIp(ctx) } ?: "127.0.0.1"
       mapOf("baseUrl" to "http://$ip:$port", "port" to port)

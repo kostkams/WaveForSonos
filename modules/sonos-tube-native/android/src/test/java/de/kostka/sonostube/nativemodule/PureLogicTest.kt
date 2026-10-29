@@ -4,10 +4,12 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.schabi.newpipe.extractor.Page
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 
 class PureLogicTest {
 
@@ -67,6 +69,24 @@ class PureLogicTest {
     assertEquals(RangeResult.Partial(ByteRange(500, 999)), HttpRange.parse("bytes=500-5000", 1000))
     assertEquals(RangeResult.Unsatisfiable, HttpRange.parse("bytes=1000-", 1000))
     assertEquals(RangeResult.Partial(ByteRange(0, 9)), HttpRange.parse("bytes=0-9,20-29", 1000))
+    // Syntactically invalid specs are ignored (RFC 7233): full body, not 416.
+    assertEquals(RangeResult.Full, HttpRange.parse("bytes=5-3", 1000))
+    assertEquals(RangeResult.Full, HttpRange.parse("bytes=--5", 1000))
+    assertEquals(RangeResult.Full, HttpRange.parse("bytes=+5-", 1000))
+    assertEquals(RangeResult.Full, HttpRange.parse("bytes=a-b", 1000))
+    assertEquals(RangeResult.Full, HttpRange.parse("bytes=2000-1000", 1000))
+    // Valid but unsatisfiable.
+    assertEquals(RangeResult.Unsatisfiable, HttpRange.parse("bytes=1000-1500", 1000))
+    assertEquals(RangeResult.Unsatisfiable, HttpRange.parse("bytes=-0", 1000))
+    assertEquals(RangeResult.Partial(ByteRange(0, 999)), HttpRange.parse("bytes=-5000", 1000))
+  }
+
+  @Test
+  fun queryParsing_skipsMalformedEscapes() {
+    val q = StreamProxyServer.parseQuery("start=12.5&bad=%zz&%zz=1&name=a%20b&flag")
+    assertEquals(mapOf("start" to "12.5", "name" to "a b", "flag" to ""), q)
+    assertEquals(emptyMap<String, String>(), StreamProxyServer.parseQuery(""))
+    assertEquals(emptyMap<String, String>(), StreamProxyServer.parseQuery("x=%"))
   }
 
   // region synthetic fMP4
@@ -135,6 +155,42 @@ class PureLogicTest {
     val skipped = ByteArrayOutputStream()
     Fmp4.remuxToAdts(header.init, ByteArrayInputStream(data), skipped, skipUntilTicks = 2048)
     assertEquals((30 + 7) + (60 + 3 * 7), skipped.size())
+  }
+
+  private fun sidxBox(): ByteArray = box(
+    "sidx",
+    u32(0), u32(1), u32(1000), u32(0), u32(0), u16(0), u16(2),
+    u32(100), u32(10_000), u32(0),
+    u32(200), u32(10_000), u32(0)
+  )
+
+  private fun assertIOException(block: () -> Unit) {
+    try {
+      block()
+      fail("expected IOException")
+    } catch (e: IOException) {
+      // expected
+    }
+  }
+
+  @Test
+  fun parseHeader_withSidx() {
+    val init = initSegment()
+    val sidx = sidxBox()
+    val header = Fmp4.parseHeader(init + sidx)
+    assertEquals(1000L, header.sidx!!.timescale)
+    assertEquals(2, header.sidx!!.references.size)
+    assertEquals((init.size + sidx.size).toLong(), header.firstFragmentOffset)
+  }
+
+  @Test
+  fun parseHeader_truncatedBoxesThrowIOException() {
+    val init = initSegment()
+    // moov cut off → IOException (so the proxy retries with a bigger prefix), not IndexOutOfBounds
+    assertIOException { Fmp4.parseHeader(init.copyOf(init.size - 10)) }
+    val full = init + sidxBox()
+    assertIOException { Fmp4.parseHeader(full.copyOf(full.size - 5)) }
+    assertTrue(Fmp4.children(full, 0, full.size - 5).last().truncated)
   }
 
   @Test
