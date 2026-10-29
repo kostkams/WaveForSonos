@@ -1,9 +1,10 @@
-Wave for Sonos sends music, podcasts and audiobooks from your phone straight to your Sonos speakers – no extra devices needed.
+Wave for Sonos plays YouTube on your Sonos speakers: music, videos as audio and whole playlists – plus audio files from your phone. No extra devices needed.
 
-SEARCH OR SHARE
-• Search for tracks, artists or playlists right in the app
-• Or share a video from another app with Wave for Sonos – one tap and it plays in the living room
-• Paste links from the clipboard
+SEARCH, SHARE OR PLAY YOUR OWN FILES
+• Search YouTube for songs, videos and playlists right in the app
+• Or share a video from the YouTube app with Wave for Sonos – one tap and it plays in the living room
+• Paste YouTube links from the clipboard
+• Play audio files from your phone (MP3, M4A, FLAC, WAV, OGG)
 
 QUEUE & PLAYLISTS
 • Your own queue with shuffle, repeat and autoplay
@@ -26,6 +27,6 @@ PRIVATE
 • No account, no sign-in, no ads, no tracking
 • Playlists, history and settings stay on your device
 
-How it works: your phone fetches the audio stream and passes it to your Sonos speakers over your Wi-Fi. Phone and speakers need to be on the same Wi-Fi while playing.
+How it works: your phone fetches the audio stream from YouTube and passes it to your Sonos speakers over your Wi-Fi. Phone and speakers need to be on the same Wi-Fi while playing.
 
 Wave for Sonos is an independent project and is not affiliated with Sonos, Inc., YouTube or Google LLC. Sonos is a trademark of Sonos, Inc.

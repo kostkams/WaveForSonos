@@ -59,7 +59,7 @@ export const de = {
   'search.resultsFor': 'Ergebnisse für „{query}“',
   'search.nothingFound': 'Nichts gefunden',
   'search.emptyTitle': 'Was möchtest du hören?',
-  'search.emptyText': 'Suche nach Musik, Podcasts oder Playlists – oder teile ein Video aus der YouTube-App mit Wave for Sonos.',
+  'search.emptyText': 'Durchsuche YouTube nach Musik, Videos oder Playlists – oder teile ein Video aus der YouTube-App mit Wave for Sonos.',
   'search.pasteLink': 'Link einfügen',
 
   // mini player

@@ -59,7 +59,7 @@ export const en: Record<TranslationKey, string> = {
   'search.resultsFor': 'Results for “{query}”',
   'search.nothingFound': 'Nothing found',
   'search.emptyTitle': 'What would you like to hear?',
-  'search.emptyText': 'Search for music, podcasts or playlists – or share a video from the YouTube app with Wave for Sonos.',
+  'search.emptyText': 'Search YouTube for music, videos or playlists – or share a video from the YouTube app with Wave for Sonos.',
   'search.pasteLink': 'Paste link',
 
   // mini player

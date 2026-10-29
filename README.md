@@ -5,7 +5,7 @@
 <h1 align="center">Wave for Sonos</h1>
 
 <p align="center">
-  Play music, podcasts and playlists from your Android phone on your Sonos speakers.<br>
+  Play YouTube – music, videos and playlists – and your own audio files on your Sonos speakers.<br>
   Search, share from other apps, build your own playlists, and control every room from one place.
 </p>
 
@@ -23,8 +23,8 @@
 ## Features
 
 **Search, share or play your own files**
-- Search for tracks, artists and playlists in the app
-- Share a video from another app with *Wave for Sonos*, and it starts playing on your speakers
+- Search YouTube for songs, videos and playlists in the app
+- Share a video from the YouTube app with *Wave for Sonos*, and it starts playing on your speakers
 - Paste links from the clipboard
 - Play audio files from your phone (MP3, M4A, FLAC, WAV, OGG) on Sonos
 
@@ -170,9 +170,9 @@ It uses [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) (GPL
 
 ## Deutsch
 
-**Wave for Sonos** spielt Musik, Podcasts und Playlists vom Android-Handy auf deinen Sonos-Lautsprechern ab.
+**Wave for Sonos** spielt YouTube – Musik, Videos und Playlists – sowie eigene Audiodateien vom Android-Handy auf deinen Sonos-Lautsprechern ab.
 
-- **Suchen oder teilen:** in der App suchen, ein Video aus einer anderen App teilen oder einen Link einfügen
+- **Suchen oder teilen:** YouTube in der App durchsuchen, ein Video aus der YouTube-App teilen, einen Link einfügen oder eigene Audiodateien abspielen
 - **Warteschlange, eigene Playlists und Verlauf**, alles nur auf deinem Handy gespeichert
 - **Räume gruppieren**, Lautstärke pro Raum oder für die Gruppe, **Lautstärketasten des Handys steuern Sonos**
 - Material-3-Design in Hell und Dunkel, fünf Farbschemata, Deutsch und Englisch

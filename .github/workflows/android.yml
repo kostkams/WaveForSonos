@@ -225,7 +225,7 @@ jobs:
           repo_url: $REPO_URL
           repo_name: Wave for Sonos
           repo_description: >-
-            Official repository of Wave for Sonos – play music, podcasts, playlists and local files
+            Official repository of Wave for Sonos – play YouTube music, videos, playlists and local files
             from your Android phone on your Sonos speakers.
           repo_icon: icon.png
           archive_older: 0
