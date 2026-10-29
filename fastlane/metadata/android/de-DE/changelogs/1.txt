@@ -1,0 +1,5 @@
+Erste Version:
+• Suche, Teilen aus anderen Apps und Link einfügen
+• Warteschlange, eigene Playlists und Verlauf
+• Lautsprecher gruppieren, Lautstärke per Handytasten
+• Hell/Dunkel, fünf Farbschemata, Deutsch und Englisch

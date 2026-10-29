@@ -1,0 +1,31 @@
+Wave for Sonos bringt Musik, Podcasts und Hörbücher vom Handy direkt auf deine Sonos-Lautsprecher – ohne Umweg über weitere Geräte.
+
+SUCHEN ODER TEILEN
+• Suche nach Titeln, Künstlern oder Playlists direkt in der App
+• Oder teile ein Video aus einer anderen App mit Wave for Sonos – ein Tipp, und es läuft im Wohnzimmer
+• Links aus der Zwischenablage einfügen
+
+WARTESCHLANGE & PLAYLISTS
+• Eigene Warteschlange mit Zufall, Wiederholen und automatischem Weiterspielen
+• Eigene Playlists anlegen, sortieren und abspielen – gespeichert nur auf deinem Handy
+• Verlauf aller gehörten Titel, nach Tagen sortiert
+
+ALLE RÄUME IM GRIFF
+• Sonos-Lautsprecher im WLAN werden automatisch gefunden
+• Räume mit einem Häkchen gruppieren und gemeinsam abspielen
+• Lautstärke pro Raum oder für die ganze Gruppe
+• Die Lautstärketasten deines Handys regeln direkt die Sonos-Lautstärke – auch bei gesperrtem Bildschirm
+• Steuerung über die Benachrichtigung: Pause, Weiter, Zurück
+
+SCHÖN UND PERSÖNLICH
+• Modernes Material-3-Design in Hell und Dunkel
+• Fünf Farbschemata oder dynamische Farben aus deinem Hintergrundbild (Android 12+)
+• Auf Deutsch und Englisch
+
+PRIVAT
+• Kein Konto, keine Anmeldung, keine Werbung, kein Tracking
+• Playlists, Verlauf und Einstellungen bleiben auf deinem Gerät
+
+So funktioniert es: Das Handy holt den Audiostream und reicht ihn über dein WLAN an die Sonos-Lautsprecher weiter. Handy und Lautsprecher müssen dafür im selben WLAN sein, solange die Wiedergabe läuft.
+
+Wave for Sonos ist ein unabhängiges Projekt und steht in keiner Verbindung zu Sonos, Inc., YouTube oder Google LLC. Sonos ist eine Marke der Sonos, Inc.

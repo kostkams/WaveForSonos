@@ -1,0 +1,31 @@
+Wave for Sonos sends music, podcasts and audiobooks from your phone straight to your Sonos speakers – no extra devices needed.
+
+SEARCH OR SHARE
+• Search for tracks, artists or playlists right in the app
+• Or share a video from another app with Wave for Sonos – one tap and it plays in the living room
+• Paste links from the clipboard
+
+QUEUE & PLAYLISTS
+• Your own queue with shuffle, repeat and autoplay
+• Create, sort and play your own playlists – stored only on your phone
+• History of everything you played, grouped by day
+
+ALL ROOMS UNDER CONTROL
+• Sonos speakers on your Wi-Fi are found automatically
+• Group rooms with a single tap and play them together
+• Volume per room or for the whole group
+• Your phone's volume keys control the Sonos volume – even on the lock screen
+• Control playback from the notification: pause, next, previous
+
+BEAUTIFUL AND PERSONAL
+• Modern Material 3 design in light and dark
+• Five color schemes or dynamic colors from your wallpaper (Android 12+)
+• Available in English and German
+
+PRIVATE
+• No account, no sign-in, no ads, no tracking
+• Playlists, history and settings stay on your device
+
+How it works: your phone fetches the audio stream and passes it to your Sonos speakers over your Wi-Fi. Phone and speakers need to be on the same Wi-Fi while playing.
+
+Wave for Sonos is an independent project and is not affiliated with Sonos, Inc., YouTube or Google LLC. Sonos is a trademark of Sonos, Inc.

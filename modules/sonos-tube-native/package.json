@@ -1,0 +1,9 @@
+{
+  "name": "sonos-tube-native",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SonosTube native Android module (YouTube extraction, stream proxy, SSDP)",
+  "main": "index.ts",
+  "types": "index.ts",
+  "license": "GPL-3.0-or-later"
+}

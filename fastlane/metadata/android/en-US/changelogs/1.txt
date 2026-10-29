@@ -1,0 +1,5 @@
+First release:
+• Search, share from other apps and paste links
+• Queue, your own playlists and history
+• Group speakers, control volume with your phone's keys
+• Light/dark, five color schemes, English and German
