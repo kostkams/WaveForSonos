@@ -18,27 +18,29 @@ export function discover(): Promise<void> {
   return discovery;
 }
 
+/** Per-speaker timeout while probing candidates; a stale IP must not stall discovery. */
+const PROBE_TIMEOUT_MS = 2500;
+
 async function doDiscover(): Promise<void> {
   store().set({ discovering: true, error: null });
   try {
-    const found = await Native.discoverSonos(2500);
-    const seeds = [store().seedIp, ...found.map((f) => f.ip)].filter(Boolean) as string[];
-    let groups: sonos.ZoneGroup[] = [];
-    let seedIp: string | null = null;
-    for (const ip of seeds) {
-      try {
-        groups = await sonos.getZoneGroups(ip);
-        seedIp = ip;
-        break;
-      } catch {
-        // try the next responder
-      }
+    const tried = new Set<string>();
+    // 1. SSDP (multicast + broadcast), plus the speakers we knew last time.
+    const found = await Native.discoverSonos(3000).catch(() => []);
+    const known = useSettings.getState().knownSpeakerIps;
+    let result = await firstTopology([store().seedIp, ...found.map((f) => f.ip), ...known], tried);
+    // 2. The network drops SSDP (common with mesh Wi-Fi / IGMP snooping): probe the subnet on port 1400.
+    if (!result) {
+      const open = await Native.scanSonosSubnet(500).catch(() => []);
+      result = await firstTopology(open, tried);
     }
-    if (!seedIp) {
+    if (!result) {
       store().set({ groups: [], error: t('speakers.errNotFound') });
       return;
     }
+    const { groups, ip: seedIp } = result;
     store().set({ groups, seedIp });
+    useSettings.getState().set({ knownSpeakerIps: speakerIps(groups) });
     initSelection(groups);
     await refreshVolumes();
   } catch (e) {
@@ -46,6 +48,35 @@ async function doDiscover(): Promise<void> {
   } finally {
     store().set({ discovering: false });
   }
+}
+
+/** Asks the candidates for the zone topology, a few at a time; first speaker with rooms wins. */
+async function firstTopology(
+  candidates: (string | null | undefined)[],
+  tried: Set<string>,
+): Promise<{ groups: sonos.ZoneGroup[]; ip: string } | null> {
+  const ips = [...new Set(candidates.filter((ip): ip is string => !!ip && !tried.has(ip)))];
+  for (let i = 0; i < ips.length; i += 4) {
+    const batch = ips.slice(i, i + 4);
+    batch.forEach((ip) => tried.add(ip));
+    const results = await Promise.all(
+      batch.map(async (ip) => {
+        try {
+          const groups = await sonos.getZoneGroups(ip, PROBE_TIMEOUT_MS);
+          return groups.some((g) => g.members.length > 0) ? { groups, ip } : null;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const hit = results.find((r) => r !== null);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function speakerIps(groups: sonos.ZoneGroup[]): string[] {
+  return [...new Set(groups.flatMap((g) => g.members.map((m) => m.ip)).filter(Boolean))];
 }
 
 /** Reloads the topology from the known seed speaker. */

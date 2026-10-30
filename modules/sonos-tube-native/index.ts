@@ -50,6 +50,11 @@ declare class SonosTubeNativeModule extends NativeModule<SonosTubeNativeEvents> 
 
   /** SSDP search for Sonos ZonePlayers on the local network. */
   discoverSonos(timeoutMs: number): Promise<SonosDiscovery[]>;
+  /**
+   * Fallback when SSDP finds nothing: IPs in the Wi-Fi subnet that accept a TCP connection on the
+   * Sonos port 1400. Callers still have to confirm they are Sonos speakers.
+   */
+  scanSonosSubnet(connectTimeoutMs: number): Promise<string[]>;
   /** IPv4 address of the Wi-Fi interface, or null. */
   getLocalIp(): string | null;
 

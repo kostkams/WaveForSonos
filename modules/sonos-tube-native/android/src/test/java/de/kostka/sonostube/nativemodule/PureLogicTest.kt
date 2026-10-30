@@ -338,4 +338,42 @@ class PureLogicTest {
   }
 
   // endregion
+
+  // region network
+
+  private fun ip(s: String) = NetworkUtils.toInt(java.net.InetAddress.getByName(s) as java.net.Inet4Address)
+
+  @Test
+  fun subnetHosts_slash24_excludesOwnNetworkAndBroadcast() {
+    val hosts = NetworkUtils.subnetHosts(ip("192.168.1.23"), 24)
+    assertEquals(253, hosts.size)
+    assertEquals("192.168.1.1", NetworkUtils.toAddress(hosts.first()).hostAddress)
+    assertEquals("192.168.1.254", NetworkUtils.toAddress(hosts.last()).hostAddress)
+    assertTrue(ip("192.168.1.23") !in hosts)
+  }
+
+  @Test
+  fun subnetHosts_largeSubnetIsNarrowedAroundOwnIp() {
+    val hosts = NetworkUtils.subnetHosts(ip("10.0.37.5"), 16)
+    assertEquals(509, hosts.size)
+    assertEquals("10.0.36.1", NetworkUtils.toAddress(hosts.first()).hostAddress)
+    assertEquals("10.0.37.254", NetworkUtils.toAddress(hosts.last()).hostAddress)
+  }
+
+  @Test
+  fun broadcastAddress_slash24() {
+    assertEquals("192.168.178.255", NetworkUtils.toAddress(NetworkUtils.broadcastAddress(ip("192.168.178.40"), 24)).hostAddress)
+  }
+
+  @Test
+  fun ssdpResponse_recognizesSonos() {
+    val headers = SsdpDiscovery.parseHeaders(
+      "HTTP/1.1 200 OK\r\nLOCATION: http://192.168.1.40:1400/xml/device_description.xml\r\n" +
+        "SERVER: Linux UPnP/1.0 Sonos/80.1-55014 (ZPS27)\r\nST: urn:schemas-upnp-org:device:ZonePlayer:1\r\n\r\n"
+    )
+    assertTrue(SsdpDiscovery.isSonosResponse(headers))
+    assertTrue(!SsdpDiscovery.isSonosResponse(mapOf("server" to "Linux UPnP/1.0 FRITZ!Box", "st" to "upnp:rootdevice")))
+  }
+
+  // endregion
 }

@@ -231,6 +231,11 @@ class SonosTubeNativeModule : Module() {
       }
     }
 
+    AsyncFunction("scanSonosSubnet") Coroutine { connectTimeoutMs: Double ->
+      val ctx = context
+      withContext(Dispatchers.IO) { SubnetScan.scan(ctx, connectTimeoutMs.toInt()) }
+    }
+
     Function("getLocalIp") {
       NetworkUtils.getLocalIp(context)
     }

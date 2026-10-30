@@ -21,6 +21,8 @@ type SettingsState = {
   streamFormat: StreamFormat;
   /** UUIDs of the rooms that should play by default; first one leads the group */
   defaultRooms: string[];
+  /** Speaker IPs from the last successful discovery; probed directly when SSDP finds nothing */
+  knownSpeakerIps: string[];
   set: (patch: Partial<Omit<SettingsState, 'set'>>) => void;
 };
 
@@ -35,6 +37,7 @@ export const useSettings = create<SettingsState>()(
       volumeKeys: true,
       streamFormat: 'm4a',
       defaultRooms: [],
+      knownSpeakerIps: [],
       set: (patch) => set(patch),
     }),
     {

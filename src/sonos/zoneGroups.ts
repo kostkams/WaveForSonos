@@ -78,8 +78,8 @@ export function parseZoneGroupState(xml: string): ZoneGroup[] {
 }
 
 /** Fetch and parse the household's zone group topology from any player. */
-export async function getZoneGroups(ip: string): Promise<ZoneGroup[]> {
-  const r = await soapCall(ip, 'ZoneGroupTopology', 'GetZoneGroupState');
+export async function getZoneGroups(ip: string, timeoutMs?: number): Promise<ZoneGroup[]> {
+  const r = await soapCall(ip, 'ZoneGroupTopology', 'GetZoneGroupState', {}, { timeoutMs });
   return parseZoneGroupState(r.ZoneGroupState ?? '');
 }
 

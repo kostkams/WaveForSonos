@@ -1,7 +1,10 @@
 /// <reference types="jest" />
 
 jest.mock('@/native', () => ({
-  Native: { discoverSonos: jest.fn(async () => [{ ip: '10.0.0.1' }]) },
+  Native: {
+    discoverSonos: jest.fn(async () => [{ ip: '10.0.0.1' }]),
+    scanSonosSubnet: jest.fn(async () => [] as string[]),
+  },
 }));
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -11,10 +14,13 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 /** Tiny fake Sonos household: uuid → uuid of its coordinator. */
 const mockTopo: Record<string, string> = {};
 const mockIp = (uuid: string) => `10.0.0.${uuid.charCodeAt(0) - 64}`;
+/** Speakers answer unless a test takes them offline. */
+let mockReachable = (_ip: string) => true;
 const mockUuid = (ip: string) => String.fromCharCode(Number(ip.split('.')[3]) + 64);
 
 jest.mock('@/sonos', () => ({
-  getZoneGroups: jest.fn(async () => {
+  getZoneGroups: jest.fn(async (ip: string) => {
+    if (!mockReachable(ip)) throw new Error('unreachable');
     const coords = [...new Set(Object.values(mockTopo))];
     return coords.map((c) => ({
       id: c,
@@ -48,6 +54,8 @@ beforeEach(() => {
   for (const k of Object.keys(mockTopo)) delete mockTopo[k];
   Object.assign(mockTopo, { A: 'A', B: 'A', C: 'A' });
   useSpeakers.setState({ groups: [], selected: [], seedIp: null, discovering: false, error: null });
+  useSettings.setState({ knownSpeakerIps: [] });
+  mockReachable = () => true;
   jest.clearAllMocks();
 });
 
@@ -82,4 +90,41 @@ test('errorText translates known native error codes and keeps other messages', (
   expect(errorText(coded('ERR_NETWORK'))).toBe('raw native message');
   expect(errorText(coded('toString'))).toBe('raw native message');
   expect(errorText('plain')).toBe('plain');
+});
+
+describe('discovery fallbacks', () => {
+  test('remembers the speaker IPs after a successful discovery', async () => {
+    await discover();
+    expect(useSettings.getState().knownSpeakerIps.sort()).toEqual(['10.0.0.1', '10.0.0.2', '10.0.0.3']);
+  });
+
+  test('probes the remembered IPs when SSDP finds nothing', async () => {
+    mockNative.discoverSonos.mockResolvedValueOnce([]);
+    useSettings.setState({ knownSpeakerIps: ['10.0.0.9', '10.0.0.2'] });
+    mockReachable = (ip) => ip !== '10.0.0.9';
+    await discover();
+    const s = useSpeakers.getState();
+    expect(s.error).toBeNull();
+    expect(s.seedIp).toBe('10.0.0.2');
+    expect(mockNative.scanSonosSubnet).not.toHaveBeenCalled();
+  });
+
+  test('scans the subnet when SSDP and the remembered IPs fail', async () => {
+    mockNative.discoverSonos.mockRejectedValueOnce(new Error('ERR_SSDP'));
+    mockNative.scanSonosSubnet.mockResolvedValueOnce(['10.0.0.200', '10.0.0.3']);
+    mockReachable = (ip) => ip === '10.0.0.3';
+    await discover();
+    const s = useSpeakers.getState();
+    expect(s.error).toBeNull();
+    expect(s.seedIp).toBe('10.0.0.3');
+    expect(s.groups.length).toBeGreaterThan(0);
+  });
+
+  test('reports not found when nothing answers', async () => {
+    mockNative.discoverSonos.mockResolvedValueOnce([]);
+    mockReachable = () => false;
+    await discover();
+    expect(useSpeakers.getState().groups).toEqual([]);
+    expect(useSpeakers.getState().error).toBeTruthy();
+  });
 });
